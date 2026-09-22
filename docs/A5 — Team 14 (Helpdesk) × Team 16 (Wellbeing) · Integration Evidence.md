@@ -284,9 +284,9 @@ _Required: breakage timestamp, fallback JSON output, automatic recovery log._
 
 | Moment                                 | Time                                        | Evidence                                                                                                |
 | -------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Breakage                               | `TODO Team 14 — time of the degraded call`  | `GET /wellbeing/services` still answers **`200`** in 1.18 s                                             |
+| Breakage                               | `Team 14 — time of the degraded call`  | `GET /wellbeing/services` still answers **`200`** in 1.18 s                                             |
 | Fallback JSON                          | —                                           | `{"services":[],"degraded":true}` — the Wellbeing suggestion is hidden; tickets are never blocked       |
-| Recovery                               | `TODO Team 14 — time of the recovered call` | URL restored → `200`, `services [4]`, `"degraded": false`; no repair beyond restoring the configuration |
+| Recovery                               | `Team 14 — time of the recovered call` | URL restored → `200`, `services [4]`, `"degraded": false`; no repair beyond restoring the configuration |
 | First call reaching the provider again | `2026-09-21T12:11:39.631Z` (19:11:38 UTC+7) | Team 16's log, cid `team14-a5-0003`                                                                     |
 
 ![Team 14's proxy during the simulated outage: 200 with services empty and degraded true](https://raw.githubusercontent.com/TEERAPAT-SUKKASEM/wellbeing-intake/main/docs/evidence/6-team14-proxy-degraded-true.png)
