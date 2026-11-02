@@ -49,12 +49,12 @@ function SignInForm() {
 
   return (
     <div className="mx-auto max-w-md space-y-6">
-      <h1 className="text-3xl font-semibold tracking-tight">Sign in</h1>
-      <p className="text-slate-700">
+      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Sign in</h1>
+      <p className="text-base-content/70">
         Demo accounts only. We keep just your campus identity reference, name and email — nothing else your identity
         provider offers is stored.
       </p>
-      <form onSubmit={onSubmit} className="space-y-4 rounded-xl border border-slate-200 bg-white p-5" noValidate>
+      <form onSubmit={onSubmit} className="space-y-4 card card-border bg-base-100 p-5" noValidate>
         <div>
           <label htmlFor="email" className="block font-medium">
             Email
@@ -66,7 +66,7 @@ function SignInForm() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-400 px-3 py-2"
+            className="input mt-1 w-full"
           />
         </div>
         <div>
@@ -81,18 +81,18 @@ function SignInForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             aria-describedby={error ? "sign-in-error" : undefined}
-            className="mt-1 w-full rounded-md border border-slate-400 px-3 py-2"
+            className="input mt-1 w-full"
           />
         </div>
         {error && (
-          <p id="sign-in-error" role="alert" className="rounded-md border border-rose-700 bg-rose-50 p-3 text-rose-950">
+          <p id="sign-in-error" role="alert" className="alert alert-error alert-soft block p-3">
             {error}
           </p>
         )}
         <button
           type="submit"
           disabled={busy}
-          className="rounded-md bg-teal-800 px-4 py-2 font-medium text-white hover:bg-teal-900 disabled:opacity-60"
+          className="btn btn-primary w-full"
         >
           {busy ? "Signing in…" : "Sign in"}
         </button>

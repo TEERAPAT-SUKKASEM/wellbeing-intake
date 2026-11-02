@@ -38,6 +38,23 @@ Supabase Postgres — deny-all RLS (zero policies); invariants live in the datab
 
 ## Run it locally
 
+### UI-only preview (no database)
+
+For frontend work, add `UI_PREVIEW=true` to `.env.local` and run `npm run dev`.
+The homepage shows fictional sample services, and their request buttons open the form without
+sign-in. The helper uses local word matching. Form validation, an urgent state, and a fictional
+dashboard with sample booking and cancellation are clickable; nothing is sent or saved.
+Use the header's **My requests** link to jump to `/preview/requests`.
+This mode only runs in development;
+production always uses the real API. Remove the flag to use the normal backend flow.
+
+The preview and connected `/requests` route render the same `RequestsDashboard`,
+`StudentRequestCard`, `BookingTimePicker`, and `AppointmentSummary` components. Only the data
+source changes: preview uses isolated in-memory fixtures; production calls `/api/v1`.
+The preview does not store request content, credentials, or browser data. Appointment duration,
+end time, and location are omitted because the current API does not supply them.
+Cancellation does not reopen a handled request; both modes offer a new-request action afterward.
+
 Prerequisites: Node 22.12+ (or 24), pnpm 10, Docker Desktop (running).
 
 ```bash

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client/api";
+import { previewServices } from "@/lib/client/preview-services";
 import { CANNOT_HELP_NOW, EMERGENCY_CONTACTS } from "@/lib/emergency";
 import { ACUTE_LEVEL_ID, TRIAGE_LEVELS } from "@/lib/triage";
 
@@ -17,12 +18,13 @@ const FIELD_LABELS: Record<string, string> = {
   freeText: "Anything else",
 };
 
-export function RequestForm() {
+export function RequestForm({ preview = false }: { preview?: boolean }) {
   const router = useRouter();
   const serviceId = useSearchParams().get("service") ?? "";
 
-  const [service, setService] = useState<Service | null>(null);
-  const [ready, setReady] = useState(false);
+  const [liveService, setService] = useState<Service | null>(null);
+  const service = preview ? previewServices.find((s) => s.id === serviceId) ?? null : liveService;
+  const [ready, setReady] = useState(preview);
   // FR-20: every new request starts empty. Nothing is pre-filled from any earlier request.
   const [description, setDescription] = useState("");
   const [freeText, setFreeText] = useState("");
@@ -36,6 +38,11 @@ export function RequestForm() {
   const errorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (errors.length) errorRef.current?.focus();
+  }, [errors]);
+
+  useEffect(() => {
+    if (preview) return;
     let alive = true;
     (async () => {
       const me = await api("/me");
@@ -52,7 +59,7 @@ export function RequestForm() {
     return () => {
       alive = false;
     };
-  }, [router, serviceId]);
+  }, [router, serviceId, preview]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -62,7 +69,12 @@ export function RequestForm() {
     if (triage === null) missing.push("triageLevelId"); // FR-06: no request without a level
     if (missing.length) {
       setErrors(missing);
-      errorRef.current?.focus();
+      return;
+    }
+
+    if (preview) {
+      if (triage === ACUTE_LEVEL_ID) setSubmittedAcute(true);
+      else router.push(`/preview/requests?service=${encodeURIComponent(serviceId)}`);
       return;
     }
 
@@ -87,7 +99,6 @@ export function RequestForm() {
     }
     if (!r.ok) {
       setErrors(r.fields?.length ? r.fields : ["(form)"]);
-      errorRef.current?.focus();
       return;
     }
     if (r.data?.acute) {
@@ -101,7 +112,7 @@ export function RequestForm() {
 
   if (!service) {
     return (
-      <p className="rounded-md border border-slate-300 bg-white p-4">
+      <p className="rounded-md border border-base-300 bg-base-100 p-4">
         Please choose a service first.{" "}
         <Link className="underline" href="/">
           Back to all services
@@ -112,7 +123,7 @@ export function RequestForm() {
 
   if (submittedAcute) {
     return (
-      <section aria-labelledby="acute-heading" className="space-y-4 rounded-xl border-2 border-rose-700 bg-rose-50 p-6 text-rose-950">
+      <section aria-labelledby="acute-heading" className="space-y-4 alert alert-error alert-soft block p-6">
         <h2 id="acute-heading" className="text-2xl font-semibold" tabIndex={-1}>
           Please contact someone now
         </h2>
@@ -129,12 +140,12 @@ export function RequestForm() {
           ))}
         </ul>
         <p>
-          Your request has been recorded and flagged so that a member of staff follows it up directly. It is{" "}
+          {preview ? "This is a sample urgent state. No request was sent and no staff have been notified. In the connected app, urgent requests are flagged for staff follow-up." : "Your request has been recorded and flagged so that a member of staff follows it up directly."} It is{" "}
           <strong>not</strong> being handled by booking a slot in this app, and a reply here may not be quick — please
           do not wait for it.
         </p>
-        <Link className="inline-block underline" href="/requests">
-          See my requests
+        <Link className="inline-block underline" href={preview ? "/preview/requests" : "/requests"}>
+          {preview ? "View sample dashboard" : "See my requests"}
         </Link>
       </section>
     );
@@ -143,8 +154,8 @@ export function RequestForm() {
   const acuteSelected = triage === ACUTE_LEVEL_ID;
 
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-6">
-      <section aria-labelledby="privacy-heading" className="rounded-xl border border-teal-700 bg-teal-50 p-5">
+    <form onSubmit={onSubmit} noValidate className="mx-auto max-w-3xl space-y-6">
+      <section aria-labelledby="privacy-heading" className="rounded-xl border border-base-300 bg-base-200 p-5">
         <h2 id="privacy-heading" className="text-lg font-semibold">
           Who can see this request
         </h2>
@@ -169,7 +180,7 @@ export function RequestForm() {
         ref={errorRef}
         tabIndex={-1}
         role={errors.length ? "alert" : undefined}
-        className={errors.length ? "rounded-md border border-rose-700 bg-rose-50 p-4 text-rose-950" : "hidden"}
+        className={errors.length ? "alert alert-error alert-soft block p-4" : "hidden"}
       >
         <p className="font-semibold">Please check the form:</p>
         <ul className="list-disc pl-5">
@@ -179,14 +190,14 @@ export function RequestForm() {
         </ul>
       </div>
 
-      <div className="space-y-5 rounded-xl border border-slate-200 bg-white p-5">
-        <p className="text-sm text-slate-700">
+      <div className="space-y-6 card card-border bg-base-100 p-5 sm:p-8">
+        <p className="text-sm text-base-content/70">
           Service: <strong>{service.name}</strong>
         </p>
 
         <div>
           <label htmlFor="description" className="block font-medium">
-            What would you like help with? <span className="font-normal text-slate-600">(a sentence or two)</span>
+            What would you like help with? <span className="font-normal text-base-content/70">(a sentence or two)</span>
           </label>
           <textarea
             id="description"
@@ -196,15 +207,17 @@ export function RequestForm() {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             aria-invalid={errors.includes("structuredDescription")}
-            className="mt-1 w-full rounded-md border border-slate-400 px-3 py-2"
+            aria-describedby={errors.includes("structuredDescription") ? "description-error" : undefined}
+            className="textarea mt-1 w-full"
           />
+          {errors.includes("structuredDescription") && <p id="description-error" className="field-error mt-2 text-sm">Enter what you would like help with, up to 500 characters.</p>}
         </div>
 
         <div>
           <label htmlFor="free-text" className="block font-medium">
-            Anything else? <span className="font-normal text-slate-600">(optional)</span>
+            Anything else? <span className="font-normal text-base-content/70">(optional)</span>
           </label>
-          <p id="free-text-hint" className="text-sm text-slate-700">
+          <p id="free-text-hint" className="text-sm text-base-content/70">
             Staff-readable: the practitioners of {service.name} will read this too.
           </p>
           <textarea
@@ -213,9 +226,11 @@ export function RequestForm() {
             maxLength={2000}
             value={freeText}
             onChange={(e) => setFreeText(e.target.value)}
-            aria-describedby="free-text-hint"
-            className="mt-1 w-full rounded-md border border-slate-400 px-3 py-2"
+            aria-invalid={errors.includes("freeText")}
+            aria-describedby={errors.includes("freeText") ? "free-text-hint free-text-error" : "free-text-hint"}
+            className="textarea mt-1 w-full"
           />
+          {errors.includes("freeText") && <p id="free-text-error" className="field-error mt-2 text-sm">Keep the extra details within 2,000 characters.</p>}
         </div>
 
         <div>
@@ -229,36 +244,39 @@ export function RequestForm() {
             value={preferred}
             onChange={(e) => setPreferred(e.target.value)}
             aria-invalid={errors.includes("preferredTimes")}
+            aria-describedby={errors.includes("preferredTimes") ? "preferred-error" : undefined}
             placeholder="e.g. weekday afternoons"
-            className="mt-1 w-full rounded-md border border-slate-400 px-3 py-2"
+            className="input mt-1 w-full"
           />
+          {errors.includes("preferredTimes") && <p id="preferred-error" className="field-error mt-2 text-sm">Enter your preferred times, up to 300 characters.</p>}
         </div>
 
-        <fieldset aria-invalid={errors.includes("triageLevelId")}>
-          <legend className="font-medium">How soon do you need to be seen?</legend>
-          <p className="text-sm text-slate-700">Your answer decides the order staff see requests in. Nobody changes it for you.</p>
+        <fieldset className="fieldset text-base" aria-invalid={errors.includes("triageLevelId")} aria-describedby={errors.includes("triageLevelId") ? "triage-error" : undefined}>
+          <legend className="fieldset-legend whitespace-normal">How soon do you need to be seen?</legend>
+          <p className="text-sm text-base-content/70">Your answer decides the order staff see requests in. Nobody changes it for you.</p>
           <div className="mt-2 space-y-2">
             {TRIAGE_LEVELS.map((t) => (
-              <label key={t.id} className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 p-3 has-[:checked]:border-teal-800 has-[:checked]:bg-teal-50">
+              <label key={t.id} data-urgent={t.id === ACUTE_LEVEL_ID} className="flex cursor-pointer items-start gap-3 rounded-field border border-base-300 p-4 has-[:checked]:border-neutral has-[:checked]:bg-base-200">
                 <input
                   type="radio"
                   name="triage"
                   value={t.id}
                   checked={triage === t.id}
                   onChange={() => setTriage(t.id)}
-                  className="mt-1 size-4"
+                  className="radio mt-0.5 shrink-0"
                 />
                 <span>
                   <span className="font-medium">{t.label}</span>
-                  <span className="block text-sm text-slate-700">{t.description}</span>
+                  <span className="block text-sm text-base-content/70">{t.description}</span>
                 </span>
               </label>
             ))}
           </div>
+          {errors.includes("triageLevelId") && <p id="triage-error" className="field-error mt-2 text-sm">Choose how soon you need to be seen.</p>}
         </fieldset>
 
         {acuteSelected && (
-          <div role="alert" className="rounded-xl border-2 border-rose-700 bg-rose-50 p-4 text-rose-950">
+          <div role="alert" className="alert alert-error alert-soft block p-4">
             <p className="font-semibold">Please do not wait for this app.</p>
             <p className="mt-1">{CANNOT_HELP_NOW}</p>
             <ul className="mt-2 space-y-1">
@@ -271,7 +289,7 @@ export function RequestForm() {
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-sm">You can still send this request so staff follow up with you directly.</p>
+            <p className="mt-2 text-sm">{preview ? "Sample only: no request is sent and no staff are notified. In the connected app, an urgent request is flagged for direct follow-up." : "You can still send this request so staff follow up with you directly."}</p>
           </div>
         )}
       </div>
@@ -279,10 +297,11 @@ export function RequestForm() {
       <button
         type="submit"
         disabled={busy}
-        className="rounded-md bg-teal-800 px-5 py-2.5 font-medium text-white hover:bg-teal-900 disabled:opacity-60"
+        className="btn btn-primary w-full sm:w-auto"
       >
         {busy ? "Sending…" : "Send request privately"}
       </button>
+      {preview && <p className="text-sm text-base-content/70">Sample only. Fields stay on this screen and are discarded when you leave. Continue to see a fictional request and booking example.</p>}
     </form>
   );
 }
