@@ -74,7 +74,7 @@ curl -s -X POST https://wellbeing-intake.vercel.app/api/v1/internal/events/dispa
 
 ### AI helper down
 Nothing to do: the keyword fallback answers automatically and the response says `mode:"fallback"`;
-the log line (`kind:"finder"`) gives the reason — `disabled`, `budget_exhausted` or `ai_unavailable`.
+the log line (`kind:"finder"`) gives the reason — `prompt_injection_blocked`, `disabled`, `budget_exhausted` or `ai_unavailable`.
 - Provider is Groq (free tier: about 8,000 tokens per minute and 1,000 requests per day). Hitting the
   per-minute limit returns `429` and recovers by itself within a minute (proven in A5 §6b).
 - Our own cap is `AI_DAILY_BUDGET` (200 calls per day); it resets at midnight UTC.
