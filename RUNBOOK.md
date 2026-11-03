@@ -25,8 +25,8 @@ We are not paired with Team 01 Identity, Team 20 Notification Hub or Team 23 Gat
 in fixture mode and webhooks go to the built-in contract mock.
 
 Acute-flagged requests (BR-04): owned by the intake coordinator until a practitioner marks them
-Escalated. Demo-world response time — **proposed: acknowledged within 1 hour during staffed demo
-sessions; policy owner Teerapat Sukkasem.** `TODO — instructor sign-off (BR-04)`. The app itself
+Escalated. Demo-world response time — **acknowledged within 1 hour during staffed demo
+sessions; policy owner Teerapat Sukkasem (confirmed for demo operations, BR-04).** The app itself
 never promises a response time: the Urgent path always shows the emergency contacts first.
 
 ## Health check
