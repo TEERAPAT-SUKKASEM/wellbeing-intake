@@ -1,0 +1,7 @@
+// Fictional catalogue for visual review only. Never submitted to the API.
+export const previewServices = [
+  { id: "preview-counselling", slug: "counselling", name: "Counselling", whatFor: "Talk through stress, anxiety, relationships, or anything weighing on you. Your concern does not need to feel big enough.", firstSession: "A relaxed 50-minute conversation about what is going on and what might help.", whoWillKnow: "Only the counsellors of this service. Not your lecturers, parents, or other students." },
+  { id: "preview-health", slug: "health-clinic", name: "Health clinic", whatFor: "Everyday physical health, vaccinations, minor injuries, medical certificates, and general health questions.", firstSession: "A 15 to 20 minute visit with a campus nurse. Bring your student ID.", whoWillKnow: "Only the nurses of the health clinic." },
+  { id: "preview-physio", slug: "physiotherapy", name: "Physiotherapy", whatFor: "Sports injuries, aches, back and neck pain from study, and recovery after an injury.", firstSession: "A 30-minute assessment and a first set of exercises to support your recovery.", whoWillKnow: "Only the physiotherapists of this service." },
+  { id: "preview-wellbeing", slug: "wellbeing-advising", name: "Wellbeing advising", whatFor: "Practical help with sleep, study-life balance, money worries, and settling into campus life.", firstSession: "A 30-minute chat to map out what would make things easier.", whoWillKnow: "Only the wellbeing officers of this service." },
+];

@@ -1,14 +1,76 @@
 @import "tailwindcss";
+@plugin "daisyui" {
+  themes: light --default;
+}
+@plugin "daisyui/theme" {
+  name: "light";
+  default: true;
+  --color-base-100: #fffcf6;
+  --color-base-200: #efeee7;
+  --color-base-300: #d4d7cc;
+  --color-base-content: #243b33;
+  --color-primary: #ccbb94;
+  --color-primary-content: #1c3028;
+  --color-neutral: #244638;
+  --color-neutral-content: #ffffff;
+  --color-warning: #805000;
+  --color-warning-content: #ffffff;
+  --color-error: #a32643;
+  --color-error-content: #ffffff;
+  --radius-box: 1rem;
+  --radius-field: 0.5rem;
+}
 
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+:root {
+  --motion-fast: 160ms;
+  --motion-enter: 220ms;
+  --motion-drawer: 280ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --surface-glass-background: rgb(255 255 255 / 6.3%);
+  --surface-glass-border: rgb(255 255 255 / 22%);
+  --surface-glass-shadow: 0 8px 32px rgb(10 27 33 / 12.5%);
+  --surface-glass-blur: blur(18px);
+}
+
 /* NFR-20: a focus indicator that is always visible, on every interactive element. */
 :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
-  outline: 3px solid #0f766e;
+  outline: 3px solid var(--color-neutral);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+@layer base {
+  body { font-family: var(--font-sans); isolation: isolate; }
+  h1, h2, h3 { text-wrap: balance; }
+  p, dd { line-height: 1.7; }
+  [id] { scroll-margin-top: 2rem; }
+  ::selection { background: var(--color-neutral); color: var(--color-neutral-content); }
+  input, textarea { caret-color: var(--color-neutral); }
+  input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--color-base-content) 75%, var(--color-base-100)); opacity: 1; }
+  * { scrollbar-color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) var(--color-base-200); scrollbar-width: thin; }
+}
+
+@utility input {
+  min-height: 2.75rem;
+  border-color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
+}
+
+@utility textarea {
+  border-color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
+}
+
+@utility radio {
+  border-color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
+}
+
+@utility btn {
+  min-height: 2.75rem;
+  box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -16,4 +78,219 @@
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Campus visual system: warm reading surfaces, pine navigation, quiet gold actions. */
+.display-heading { font-family: var(--font-retreat-serif), Georgia, serif; font-weight: 500; line-height: 1.1; letter-spacing: -0.025em; }
+.preview-strip { background: #152a23ba; backdrop-filter: blur(16px); color: #f3eee2; letter-spacing: 0.04em; }
+.retreat-sidebar {
+  --color-base-100: #152a23;
+  --color-base-200: #263c32;
+  --color-base-300: #3e5146;
+  --color-base-content: #f1eee4;
+  --color-neutral: #d4c39e;
+  --color-neutral-content: #182c23;
+  background: #152a23e8;
+  backdrop-filter: blur(18px);
+  color: #f1eee4;
+  border-color: #35493d;
+}
+.retreat-sidebar .brand-mark { background: #cdbc96; color: #203b2d; border-radius: 50%; }
+.retreat-sidebar .menu a { border-radius: 4px; background: transparent; transition: color var(--motion-fast) ease; }
+.retreat-sidebar .menu a:hover { background: transparent; }
+.retreat-sidebar .menu a:hover > span { text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1px; }
+.retreat-sidebar .menu a[aria-current="page"] { background: transparent; box-shadow: none; }
+.retreat-sidebar .menu a[aria-current="page"] > span { color: #d0bd95; font-weight: 700; }
+.retreat-sidebar .menu a[aria-current="page"] > span { text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1px; }
+.retreat-sidebar :focus-visible { outline-color: #d0bd95; }
+.campus-scene { position: relative; isolation: isolate; min-height: 400px; margin: 0; background: transparent; color: #f9f6ed; display: flex; align-items: flex-end; }
+.scene-image { object-fit: cover; object-position: 60% 55%; filter: saturate(0.65); }
+.hero-copy { position: relative; z-index: 2; max-width: 680px; padding: 48px 0; animation: quiet-arrival 900ms cubic-bezier(0.16, 1, 0.3, 1); }
+.hero-copy h1 { font-family: var(--font-retreat-serif), Georgia, serif; font-weight: 400; font-size: clamp(3.25rem, 5.5vw, 5rem); line-height: 0.97; letter-spacing: -0.03em; }
+.hero-copy h1 em { font-weight: 400; color: #dccba8; }
+.hero-copy > p { max-width: 42ch; margin-top: 24px; color: #f0eee3; font-size: 15px; line-height: 1.8; }
+.hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+.hero-actions .btn { min-height: 48px; padding-inline: 24px; }
+.hero-secondary { color: #f9f6ed; border-color: #ffffff60; background: #ffffff0a; backdrop-filter: blur(12px); }
+.hero-secondary:hover { color: #fff; background: #ffffff20; }
+.hero-copy > .hero-note { font-size: 12px; margin-top: 20px; color: #e5e4d8; }
+.campus-scene :focus-visible { outline-color: #dccba8; }
+.service-card { transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease; }
+
+
+.booking-scene { position: relative; min-height: 210px; overflow: hidden; border-radius: 16px; background: #152a23; color: #fffaf0; }
+.booking-scene > div { position: relative; z-index: 1; padding: 32px; max-width: 560px; }
+.booking-scene h1 { font-family: var(--font-retreat-serif), Georgia, serif; font-size: 48px; font-weight: 400; letter-spacing: -0.02em; }
+.booking-scene p { font-size: 14px; max-width: 40ch; margin-top: 12px; }
+.booking-stage { opacity: 1; transform: translateY(0); transition: opacity var(--motion-enter) var(--ease-out), transform var(--motion-enter) var(--ease-out); }
+.time-choice { transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease; }
+.time-choice:has(:checked) { background: #e5e7db; border-color: #476b51; box-shadow: 0 2px 8px #183f2310; }
+.booking-confirmed { background: #e7ebdf; border-radius: 12px; opacity: 1; transform: translateY(0); transition: opacity var(--motion-enter) var(--ease-out), transform var(--motion-enter) var(--ease-out); }
+
+@keyframes quiet-arrival { from { opacity: 0.7; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 639px) {
+  .campus-scene { min-height: 0; }
+  .hero-copy { padding: 24px 0 32px; }
+  .hero-copy h1 { font-size: clamp(3.25rem, 12vw, 4.5rem); }
+  .hero-copy > p { font-size: 14px; }
+  .hero-actions { align-items: stretch; gap: 12px; }
+  .hero-actions .btn { width: 100%; padding-inline: 16px; }
+  .booking-scene > div { padding: 24px; }
+  .booking-scene h1 { font-size: 40px; }
+}
+@media (prefers-reduced-motion: reduce) { .scene-image { transform: none; } html { scroll-behavior: auto; } }
+
+/* The campus photograph belongs to the page canvas, across every route and scroll position. */
+.campus-backdrop { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: #142b25; }
+.campus-backdrop .scene-image { object-position: 60% 50%; }
+.page-backdrop-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgb(9 28 21 / 82%), rgb(9 28 21 / 68%) 75%), linear-gradient(0deg, rgb(9 28 21 / 40%), transparent 75%); }
+.page-main > :not(.retreat-home) { border-radius: 16px; padding: 24px; }
+.retreat-home section[aria-labelledby="services-heading"] > h2,
+.retreat-home section[aria-labelledby="services-heading"] > p { color: #f9f6ed; }
+.retreat-home #services-heading:focus-visible { outline-color: #dccba8; }
+.retreat-home section[aria-labelledby="next-heading"] { padding: 32px; border-radius: 16px; }
+.page-footer { background: rgb(255 252 246 / 92%); backdrop-filter: blur(18px); }
+@media (max-width: 639px) { .page-main > :not(.retreat-home) { padding: 20px 16px; } .retreat-home section[aria-labelledby="next-heading"] { padding: 20px; } }
+@media (min-width: 1024px) { [id] { scroll-margin-top: 7rem; } }
+
+/* Shared readable glass surfaces use the same daisyUI theme on every page. */
+.retreat-home .home-glass,
+.page-main > :not(.retreat-home) {
+  --color-base-100: #1d352c;
+  --color-base-200: #2f483c;
+  --color-base-300: #6d8174;
+  --color-base-content: #f6f3e9;
+  --color-neutral: #d0bd95;
+  --color-neutral-content: #1c3028;
+  color: var(--color-base-content);
+  background: var(--surface-glass-background);
+  border: 1px solid var(--surface-glass-border);
+  box-shadow: var(--surface-glass-shadow);
+  -webkit-backdrop-filter: var(--surface-glass-blur);
+  backdrop-filter: var(--surface-glass-blur);
+}
+:is(.home-glass, .page-main > :not(.retreat-home)) .border-base-300 { border-color: rgb(244 240 220 / 22%); }
+:is(.home-glass, .page-main > :not(.retreat-home)) :is(.input, .textarea) { background: rgb(10 30 22 / 55%); }
+:is(.home-glass, .page-main > :not(.retreat-home)) :is(.input, .textarea):focus { border-color: #d0bd95; }
+:is(.home-glass, .page-main > :not(.retreat-home)) .btn:not(.btn-neutral):not(.btn-primary) { border-color: rgb(244 240 220 / 30%); }
+:is(.home-glass, .page-main > :not(.retreat-home)) :focus-visible { outline-color: #d0bd95; }
+.retreat-home .service-card:hover { border-color: rgb(244 240 220 / 48%); }
+.retreat-home .service-card .card-title { letter-spacing: -0.015em; }
+@supports not (backdrop-filter: blur(1px)) { .retreat-home .home-glass, .page-main > :not(.retreat-home) { background: #1d352c; } }
+
+/* Dense task screens use brighter copy and steadier interior surfaces. */
+:is(.home-glass, .page-main > :not(.retreat-home)) :is(.text-base-content\/70, .text-base-content\/80) { color: #f0f2e9; }
+.page-main > :not(.retreat-home) {
+  --color-error: #ffc0cf;
+  --color-error-content: #401421;
+  --color-warning: #f3d79c;
+  --color-warning-content: #33270d;
+}
+.page-main > :not(.retreat-home) .card { background: var(--surface-glass-background); border-color: var(--surface-glass-border); border-radius: 12px; box-shadow: var(--surface-glass-shadow); -webkit-backdrop-filter: var(--surface-glass-blur);
+  backdrop-filter: var(--surface-glass-blur); }
+.page-main > :not(.retreat-home) :is(.booking-scene, .booking-confirmed) { background: rgb(16 40 28 / 65%); }
+.page-main > :not(.retreat-home) :is(.time-choice:has(:checked), label:has(> input[name="triage"]:checked)) { background: rgb(217 199 159 / 17%); border-color: #d0bd95; }
+.page-main > :not(.retreat-home) .radio { border-color: #b3bfb3; }
+.page-main > :not(.retreat-home) .table { color: #f6f3e9; }
+.page-main > :not(.retreat-home) .table :where(thead, tfoot) { color: #f6f3e9; background: rgb(21 47 33 / 90%); }
+.page-main > :not(.retreat-home) .input::placeholder,
+.page-main > :not(.retreat-home) .textarea::placeholder { color: #c6d0c4; }
+.page-main > :not(.retreat-home) :is(.input, .textarea) { caret-color: #f6f3e9; }
+.page-main > :is(.requests-page, .emergency-page) {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Independent request cards; the page itself remains an unboxed canvas. */
+.page-main > :is(.requests-page, .emergency-page) { padding: 0; }
+.page-main > .requests-page .request-glass {
+  color: #f6f3e9;
+  background: var(--surface-glass-background);
+  border: 1px solid var(--surface-glass-border);
+  border-radius: 16px;
+  box-shadow: var(--surface-glass-shadow);
+  -webkit-backdrop-filter: var(--surface-glass-blur);
+  backdrop-filter: var(--surface-glass-blur);
+}
+.requests-page .booking-scene { min-height: auto; }
+.requests-page .booking-scene > div { max-width: 680px; padding: 24px; }
+.requests-page .booking-scene p { max-width: 60ch; margin-top: 8px; color: #e3e6dc; }
+.requests-page .request-note { background: rgb(16 36 27 / 78%); }
+.page-main > .requests-page .booking-confirmed { background: transparent; border-radius: 0; }
+.requests-page .appointment-status { background: rgb(208 189 149 / 13%); border-color: rgb(208 189 149 / 55%); color: #e7d9b8; }
+.requests-page .appointment-time { font-size: clamp(1.75rem, 5vw, 2.5rem); }
+.requests-page .request-glass :is(.text-base-content\/70, .text-base-content\/80) { color: #f0f2e9; }
+.requests-page .request-glass { line-height: 1.65; }
+.requests-page .request-status {
+  --color-success: #c2e6d0;
+  --color-success-content: #153c2b;
+  --color-info: #c4dfef;
+  --color-info-content: #19394d;
+  --color-error: #ffc0bd;
+  --color-error-content: #581e25;
+  --color-neutral: #d9e1dc;
+  --color-neutral-content: #293b32;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+.requests-page .request-glass .appointment-status { color: #f0dfb7; background: rgb(208 189 149 / 12%); }
+@supports not (backdrop-filter: blur(1px)) { .page-main > .requests-page .request-glass { background: #1d352c; } }
+
+/* Safety cues: red for danger and destructive confirmation, amber for caution. */
+.page-main .emergency-notice.alert-error {
+  color: #f6f3e9;
+  background: var(--surface-glass-background);
+  border: 1px solid rgb(255 180 171 / 65%);
+  border-radius: 16px;
+  box-shadow: var(--surface-glass-shadow);
+  -webkit-backdrop-filter: var(--surface-glass-blur);
+  backdrop-filter: var(--surface-glass-blur);
+}
+.emergency-notice > p:first-child,
+.emergency-notice a { color: #ffb4ab; }
+.emergency-notice ul { margin-top: 12px; row-gap: 8px; }
+.emergency-notice > p:last-child { margin-top: 12px; }
+.retreat-sidebar .menu a[href="/emergency"] > span { color: #ffb4ab; }
+.page-main .alert-error {
+  color: #ffe1e0;
+  background: rgb(76 23 32 / 94%);
+  border: 1px solid #e9969b;
+}
+.page-main .btn-error {
+  --color-error: #b9273b;
+  --color-error-content: #ffffff;
+  color: #ffffff;
+}
+.page-main .btn-error:hover { background: #a42134; }
+.page-main .field-error { color: #ffc0bd; }
+.page-main > :not(.retreat-home) :is(.input, .textarea)[aria-invalid="true"] { border-color: #ffb4ab; border-width: 2px; }
+.page-main fieldset[aria-invalid="true"] > legend { color: #ffc0bd; }
+.page-main > :not(.retreat-home) label[data-urgent="true"]:has(> input:checked) { border-color: #ffb4ab; background: rgb(76 23 32 / 78%); }
+.page-main label[data-urgent="true"] > input:checked { color: #ffb4ab; }
+
+/* Short, interruptible feedback; the campus background stays static. */
+.btn { transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) var(--ease-out); }
+@media (prefers-reduced-motion: no-preference) {
+  .btn:not(:disabled):not([aria-disabled="true"]):active { transform: scale(0.97); transition-duration: 100ms; }
+}
+@media (hover: hover) and (pointer: fine) {
+  .page-main .time-choice:not(:has(:disabled)):hover { border-color: #d0bd95; background: rgb(217 199 159 / 10%); }
+  .retreat-sidebar .menu a:hover > span { color: #e4d6b6; }
+}
+.time-choice:focus-within { outline: 2px solid #d0bd95; outline-offset: 3px; }
+#mobile-navigation > .modal-box { scale: 1; translate: -100% 0; opacity: 1; transition: translate var(--motion-drawer) var(--ease-drawer); }
+#mobile-navigation[open] > .modal-box { translate: 0 0; }
+.booking-toast > .alert { animation: none; opacity: 1; transform: translateY(0); transition: opacity var(--motion-fast) ease, transform var(--motion-fast) var(--ease-out); }
+.booking-toast[data-leaving="true"] > .alert { opacity: 0; transform: translateY(8px); pointer-events: none; }
+@starting-style {
+  .booking-stage, .booking-confirmed, .booking-toast > .alert { opacity: 0; transform: translateY(8px); }
+  #mobile-navigation[open] > .modal-box { translate: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .booking-stage, .booking-confirmed, .booking-toast > .alert, .booking-toast[data-leaving="true"] > .alert { transform: none; }
+  #mobile-navigation > .modal-box { translate: 0 0; }
 }

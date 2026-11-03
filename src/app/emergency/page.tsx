@@ -8,15 +8,15 @@ export const metadata: Metadata = { title: "Emergency contacts" };
 
 export default function EmergencyPage() {
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-semibold tracking-tight">Emergency contacts</h1>
-      <p className="max-w-2xl rounded-xl border-2 border-rose-700 bg-rose-50 p-5 text-rose-950">{CANNOT_HELP_NOW}</p>
+    <div className="emergency-page space-y-6">
+      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Emergency contacts</h1>
+      <p className="max-w-2xl alert alert-error alert-soft block p-5">{CANNOT_HELP_NOW}</p>
       <ul className="space-y-3">
         {EMERGENCY_CONTACTS.map((c) => (
-          <li key={c.tel} className="rounded-xl border border-slate-200 bg-white p-5">
+          <li key={c.tel} className="card card-border bg-base-100 p-5">
             <p className="font-semibold">{c.name}</p>
-            <p className="text-sm text-slate-700">{c.detail}</p>
-            <a className="mt-1 inline-block text-2xl font-bold text-teal-900 underline underline-offset-4" href={`tel:${c.tel}`}>
+            <p className="text-sm text-base-content/70">{c.detail}</p>
+            <a className="mt-1 inline-block text-2xl font-bold text-base-content underline underline-offset-4" href={`tel:${c.tel}`}>
               {c.phone}
             </a>
           </li>

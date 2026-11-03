@@ -37,8 +37,8 @@ export default function CoordinatorPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-semibold tracking-tight">Intake overview</h1>
-      <p className="text-sm text-slate-700">
+      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Intake overview</h1>
+      <p className="text-sm text-base-content/70">
         Operational metadata across all services. You never see what a student wrote. Urgent requests are listed first.
       </p>
 
@@ -46,8 +46,8 @@ export default function CoordinatorPage() {
         role="status"
         className={
           openAcute.length
-            ? "rounded-xl border-2 border-rose-700 bg-rose-50 p-4 font-medium text-rose-950"
-            : "rounded-xl border border-slate-200 bg-white p-4"
+            ? "alert alert-error alert-soft block p-4 font-medium"
+            : "alert block border border-base-300 bg-base-200 p-4"
         }
       >
         {openAcute.length
@@ -55,10 +55,10 @@ export default function CoordinatorPage() {
           : "No urgent requests are waiting."}
       </p>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-x-auto card card-border bg-base-100">
+        <table className="table">
           <caption className="sr-only">All requests, urgent first, metadata only</caption>
-          <thead className="border-b border-slate-200 bg-slate-50">
+          <thead className="border-b border-base-300 bg-base-200">
             <tr>
               <th scope="col" className="px-4 py-2">Urgency</th>
               <th scope="col" className="px-4 py-2">Service</th>
@@ -75,7 +75,7 @@ export default function CoordinatorPage() {
               </tr>
             )}
             {rows.map((r) => (
-              <tr key={r.id} className="border-b border-slate-100 last:border-0">
+              <tr key={r.id} className="border-b border-base-300 last:border-0">
                 <td className="px-4 py-2 font-medium">
                   {r.acute ? "▲ " : ""}
                   {triageShort(r.triageLevelId)}
