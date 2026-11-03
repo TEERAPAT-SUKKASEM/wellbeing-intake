@@ -20,6 +20,7 @@
     "scan:bundle": "node scripts/scan-bundle.mjs",
     "check:openapi": "node scripts/check-openapi.mjs",
     "eval:ai": "node scripts/run-ai-eval.mjs",
+    "eval:ai:live": "tsx --conditions=react-server --env-file=.env.vercel scripts/eval-ai-live.ts",
     "docs:pdf": "node scripts/md-to-pdf.mjs"
   },
   "dependencies": {
