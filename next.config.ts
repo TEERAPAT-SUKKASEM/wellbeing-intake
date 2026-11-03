@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  devIndicators: { position: "bottom-right" },
+  devIndicators: false,
   poweredByHeader: false,
   async headers() {
     return [

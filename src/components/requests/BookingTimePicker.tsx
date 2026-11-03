@@ -34,6 +34,6 @@ export function BookingTimePicker({ slots, busy, onConfirm }: { slots: BookingSl
       </div>
     </fieldset>
     <div className="rounded-field border border-base-300 bg-base-200 p-4" role="status" aria-live="polite" aria-atomic="true">{selected ? <><p className="text-sm text-base-content/70">Your selection</p><p className="mt-1 font-semibold">{dateLabel(selected.startAt)}</p><p className="mt-1 text-lg tabular-nums">{timeLabel(selected.startAt)}</p><p className="mt-2 text-sm text-base-content/70">Not booked yet. Confirm your appointment below.</p></> : <p className="text-sm text-base-content/70">No time selected. Choose a start time to continue.</p>}</div>
-    <button type="button" className="btn btn-primary w-full sm:w-auto" disabled={!selected || busy} onClick={() => selected && onConfirm(selected.id)}>{busy ? "Booking…" : "Confirm appointment"}</button>
+    <button type="button" className="booking-confirm btn btn-primary w-full sm:w-auto" disabled={!selected || busy} aria-busy={busy} onClick={() => selected && onConfirm(selected.id)}>{busy && <span aria-hidden="true" className="loading loading-spinner loading-sm" />}<span>{busy ? "Booking your appointment…" : selected ? `Book ${timeLabel(selected.startAt)} appointment` : "Choose a time to continue"}</span></button>
   </div>;
 }

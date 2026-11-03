@@ -85,11 +85,12 @@ export default function PractitionerPage() {
   if (!queue) return <p>Loading…</p>;
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">My queue and schedule</h1>
+    <div className="staff-page space-y-8">
+      <header className="route-intro"><h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">My queue and schedule</h1></header>
+      <div className="staff-summary"><p><strong>{queue.filter(item => ["submitted", "in_review"].includes(item.status)).length}</strong><span>Active requests</span></p><p><strong>{queue.filter(item => item.triageLevelId === ACUTE_LEVEL_ID && ["submitted", "in_review"].includes(item.status)).length}</strong><span>Urgent follow-ups</span></p><p><strong>{slots.filter(slot => !slot.booked).length}</strong><span>Open appointment slots</span></p></div>
       <div aria-live="polite">{message && <p className="rounded-md border border-base-300 bg-base-200 p-3">{message}</p>}</div>
 
-      <section aria-labelledby="queue-heading">
+      <section aria-labelledby="queue-heading" className="queue-panel">
         <h2 id="queue-heading" className="text-xl font-semibold">
           Requests for my service
         </h2>
@@ -124,7 +125,7 @@ export default function PractitionerPage() {
                     <td className="px-4 py-2 font-mono text-xs">{q.id.slice(0, 8)}</td>
                     <td className="px-4 py-2 text-right">
                       <button type="button" onClick={() => openRequest(q.id)} className="btn min-h-11">
-                        Open<span className="sr-only"> request {q.id.slice(0, 8)}</span>
+                        Review request<span className="sr-only"> {q.id.slice(0, 8)}</span>
                       </button>
                     </td>
                   </tr>
@@ -136,7 +137,7 @@ export default function PractitionerPage() {
       </section>
 
       {open && (
-        <section aria-labelledby="open-heading" className="rounded-xl border-2 border-base-300 bg-base-100 p-5">
+        <section aria-labelledby="open-heading" className="request-detail rounded-xl border-2 border-base-300 bg-base-100 p-5">
           <h2 id="open-heading" className="text-xl font-semibold">
             Request {open.id.slice(0, 8)} — {triageShort(open.triageLevelId)}
           </h2>
@@ -181,7 +182,7 @@ export default function PractitionerPage() {
         </section>
       )}
 
-      <section aria-labelledby="slots-heading">
+      <section aria-labelledby="slots-heading" className="schedule-panel">
         <h2 id="slots-heading" className="text-xl font-semibold">
           My availability
         </h2>
@@ -199,7 +200,7 @@ export default function PractitionerPage() {
             />
           </div>
           <button type="submit" className="btn">
-            Publish slot
+            Add appointment time
           </button>
         </form>
         <ul className="mt-4 space-y-2">
@@ -211,7 +212,7 @@ export default function PractitionerPage() {
               </span>
               {!s.booked && (
                 <button type="button" onClick={() => removeSlot(s.id)} className="btn min-h-11 text-sm">
-                  Remove<span className="sr-only"> slot {formatDateTime(s.startAt)}</span>
+                  Remove time<span className="sr-only"> {formatDateTime(s.startAt)}</span>
                 </button>
               )}
             </li>

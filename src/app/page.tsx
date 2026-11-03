@@ -9,7 +9,7 @@ export default function HomePage() {
       <CampusHero />
       <EmergencyBanner />
       <ServiceFinder preview={uiPreview} />
-      <section aria-labelledby="next-heading" className="home-glass glass card card-border">
+      <section aria-labelledby="next-heading" className="how-it-works">
         <h2 id="next-heading" className="display-heading text-3xl">A clear path from here</h2>
         <ol className="mt-6 grid gap-6 sm:grid-cols-3">
           {[
