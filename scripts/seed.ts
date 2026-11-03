@@ -6,6 +6,7 @@
  */
 import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+import { requireDbTarget } from "./lib/db-target";
 
 config({ path: ".env.local" });
 config({ path: ".env" });
@@ -17,6 +18,12 @@ if (!url || !serviceKey) {
   console.error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (see .env.example).");
   process.exit(1);
 }
+requireDbTarget({
+  supabaseUrl: url,
+  argv: process.argv.slice(2),
+  command: "pnpm seed",
+  danger: "It deletes every table and every login in that database.",
+});
 
 const db = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 

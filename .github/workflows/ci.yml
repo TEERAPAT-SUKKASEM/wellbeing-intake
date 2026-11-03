@@ -28,6 +28,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm check:openapi
       - run: pnpm test
+      - run: pnpm eval:ai
 
       - name: Start local Supabase (applies migrations)
         run: pnpm db:start

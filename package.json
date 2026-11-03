@@ -12,12 +12,14 @@
     "test:integration": "vitest run --project integration",
     "test:all": "vitest run",
     "seed": "tsx scripts/seed.ts",
+    "slots:topup": "tsx scripts/slots-topup.ts",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset && pnpm seed",
     "db:env": "supabase status -o env",
     "scan:bundle": "node scripts/scan-bundle.mjs",
     "check:openapi": "node scripts/check-openapi.mjs",
+    "eval:ai": "node scripts/run-ai-eval.mjs",
     "docs:pdf": "node scripts/md-to-pdf.mjs"
   },
   "dependencies": {

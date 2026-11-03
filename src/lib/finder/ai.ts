@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { env } from "@/lib/env";
-import type { CatalogueEntry } from "@/lib/finder/keywords";
+import { hasPromptInjection, type CatalogueEntry } from "@/lib/finder/keywords";
 
 // FR-23 AI path. This module imports NOTHING from the request path (NFR-10): the only
 // things that can reach the model are the typed helper text and the public catalogue.
@@ -25,11 +25,21 @@ const SYSTEM = [
 ].join(" ");
 
 /**
+ * Gate 3 / OWASP LLM01 pre-flight guard: blocks prompt-injection directives
+ * ("Ignore previous instructions", "[SYSTEM OVERRIDE", "developer mode",
+ * "forget all rules", "reveal internal prompt", etc.) before any network call.
+ */
+export function isPromptInjection(text: string): boolean {
+  return hasPromptInjection(text);
+}
+
+/**
  * Returns ranked catalogue ids, or null on ANY problem — the caller then uses the
  * deterministic matcher. Output is validated against the catalogue, so model-written
  * text can never reach a screen (BR-24).
  */
 export async function rankWithAi(text: string, catalogue: CatalogueEntry[]): Promise<string[] | null> {
+  if (isPromptInjection(text)) return null;
   if (!env.llmApiKey) return null;
 
   try {

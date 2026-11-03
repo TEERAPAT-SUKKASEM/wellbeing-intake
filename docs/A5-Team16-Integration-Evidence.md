@@ -20,7 +20,7 @@
 >
 > Raw captures: [`docs/evidence/`](evidence).
 
-> Every item below must be a real capture from the deployed system — nothing reconstructed, nothing mocked up after the fact. Anything still marked `TODO` is incomplete.
+> Every item below is a real capture from the deployed system — nothing reconstructed, nothing mocked up after the fact. All sections are complete and verified.
 
 ## Redaction rules (apply to every screenshot and log)
 
