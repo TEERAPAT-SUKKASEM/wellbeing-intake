@@ -11,6 +11,7 @@ always one step away, and every view of request content is audited.
 - Product requirements: [`docs/PRD.md`](docs/PRD.md)
 - API contract (OpenAPI 3.1): [`openapi.yaml`](openapi.yaml)
 - Operations: [`RUNBOOK.md`](RUNBOOK.md)
+- Frontend-to-backend handoff: [`docs/FRONTEND-HANDOFF.md`](docs/FRONTEND-HANDOFF.md)
 - A3 data and query design: [`docs/A3-Team16-Data-and-Query-Design.md`](docs/A3-Team16-Data-and-Query-Design.md) (PDF: `pnpm docs:pdf docs/A3-Team16-Data-and-Query-Design.md`)
 - A5 integration evidence: [`docs/A5-Team16-Integration-Evidence.md`](docs/A5-Team16-Integration-Evidence.md) — captures from the live deployment
 - Partner integration (Team 14 — Helpdesk): [`integration/team14/`](integration/team14) — contract, Postman collection, reference client, smoke test
@@ -44,7 +45,7 @@ For frontend work, add `UI_PREVIEW=true` to `.env.local` and run `npm run dev`.
 The homepage shows fictional sample services, and their request buttons open the form without
 sign-in. The helper uses local word matching. Form validation, an urgent state, and a fictional
 dashboard with sample booking and cancellation are clickable; nothing is sent or saved.
-Use the header's **My requests** link to jump to `/preview/requests`.
+Use the navigation's **My requests** link to jump to `/preview/requests`.
 This mode only runs in development;
 production always uses the real API. Remove the flag to use the normal backend flow.
 

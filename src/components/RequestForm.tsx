@@ -7,6 +7,7 @@ import { api } from "@/lib/client/api";
 import { previewServices } from "@/lib/client/preview-services";
 import { CANNOT_HELP_NOW, EMERGENCY_CONTACTS } from "@/lib/emergency";
 import { ACUTE_LEVEL_ID, TRIAGE_LEVELS } from "@/lib/triage";
+import { UiIcon } from "@/components/UiIcon";
 
 type Service = { id: string; name: string; whoWillKnow: string };
 
@@ -154,8 +155,8 @@ export function RequestForm({ preview = false }: { preview?: boolean }) {
   const acuteSelected = triage === ACUTE_LEVEL_ID;
 
   return (
-    <form onSubmit={onSubmit} noValidate className="mx-auto max-w-3xl space-y-6">
-      <section aria-labelledby="privacy-heading" className="rounded-xl border border-base-300 bg-base-200 p-5">
+    <form onSubmit={onSubmit} noValidate className="request-form mx-auto space-y-6">
+      <section aria-labelledby="privacy-heading" className="privacy-panel rounded-xl border border-base-300 bg-base-200 p-5">
         <h2 id="privacy-heading" className="text-lg font-semibold">
           Who can see this request
         </h2>
@@ -190,7 +191,7 @@ export function RequestForm({ preview = false }: { preview?: boolean }) {
         </ul>
       </div>
 
-      <div className="space-y-6 card card-border bg-base-100 p-5 sm:p-8">
+      <div className="request-fields space-y-6 card card-border bg-base-100 p-5 sm:p-8">
         <p className="text-sm text-base-content/70">
           Service: <strong>{service.name}</strong>
         </p>
@@ -294,13 +295,19 @@ export function RequestForm({ preview = false }: { preview?: boolean }) {
         )}
       </div>
 
+      <div className="request-submit">
       <button
         type="submit"
         disabled={busy}
-        className="btn btn-primary w-full sm:w-auto"
+        aria-busy={busy}
+        className="btn btn-primary w-full"
       >
-        {busy ? "Sending…" : "Send request privately"}
+        {busy ? <span aria-hidden="true" className="loading loading-spinner loading-sm" /> : <UiIcon name="shield" className="size-5" />}
+        {busy ? "Sending your request…" : "Send private request"}
+        {!busy && <UiIcon name="arrow" className="size-4" />}
       </button>
+      <p className="mt-3 text-center text-xs text-base-content/70">{acuteSelected ? "Urgent requests are flagged for direct staff follow-up. Please use the emergency contacts if you need help now." : "A practitioner reviews your request before you can book an appointment."}</p>
+      </div>
       {preview && <p className="text-sm text-base-content/70">Sample only. Fields stay on this screen and are discarded when you leave. Continue to see a fictional request and booking example.</p>}
     </form>
   );

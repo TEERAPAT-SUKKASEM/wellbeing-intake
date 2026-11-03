@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/client/api";
 import { createRequestPreviewApi } from "@/lib/client/request-preview";
 import { UiIcon } from "@/components/UiIcon";
+import { ACUTE_LEVEL_ID } from "@/lib/triage";
 import { BookingTimePicker } from "./BookingTimePicker";
 import { StudentRequestCard } from "./StudentRequestCard";
 import type { BookingSlot, StudentRequest } from "./types";
@@ -14,6 +15,16 @@ export function RequestsDashboard({ preview = false, previewServiceId, justSent 
   const router = useRouter();
   const requestApi = useMemo(() => preview ? createRequestPreviewApi(previewServiceId) : api, [preview, previewServiceId]);
   const [requests, setRequests] = useState<StudentRequest[] | null>(null);
+  const displayRequests = useMemo(() => {
+    const priority = (request: StudentRequest) => {
+      if (request.triageLevelId === ACUTE_LEVEL_ID && ["submitted", "in_review"].includes(request.status)) return 0;
+      if (request.bookable) return 1;
+      if (request.appointment) return 2;
+      if (request.status === "submitted" || request.status === "in_review") return 3;
+      return 4;
+    };
+    return requests ? [...requests].sort((a, b) => priority(a) - priority(b)) : null;
+  }, [requests]);
   const [refresh, setRefresh] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [openFor, setOpenFor] = useState<string | null>(null);
@@ -81,19 +92,22 @@ export function RequestsDashboard({ preview = false, previewServiceId, justSent 
 
   return <div className="requests-page mx-auto max-w-4xl space-y-6 sm:space-y-8">
     <div className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="display-heading text-4xl sm:text-5xl">My requests</h1><p className="mt-3 max-w-xl text-base-content/70">A quiet place to check your progress and manage your appointments.</p></div><Link href="/" className="btn">Explore services <UiIcon name="arrow" className="size-4" /></Link></div>
-    <section className="booking-scene request-glass card card-border" aria-label="Campus wellbeing appointments"><div><h2 className="text-2xl font-semibold tracking-tight">Support that fits your student life.</h2><p>Follow your campus service request and choose an appointment after practitioner review.</p></div></section>
+    <div className="requests-columns"><div className="requests-main space-y-5">
     {preview && <p className="request-note rounded-field p-4 text-sm text-base-content/70">UI preview uses fictional records. These interactions do not book or cancel a real appointment. Refresh to reset.</p>}
     {(notice?.error || sentMessageVisible) && <p ref={noticeRef} tabIndex={-1} role={notice?.error ? "alert" : "status"} className={notice?.error ? "alert alert-error block p-4" : "request-glass alert block p-4 font-medium"}>{notice?.error ? notice.text : "Your request was sent privately. You can book a time once a practitioner has opened it."}</p>}
     {notice && !notice.error && <BookingToast key={notice.text} text={notice.text} onDismiss={dismissNotice} />}
     {loadError && <div role="alert" className="request-glass space-y-3 p-5"><p>We could not load your requests. Please try again.</p><button type="button" className="btn" onClick={() => setRefresh(value => value + 1)}>Retry loading requests</button></div>}
     {!requests && !loadError && <div role="status" aria-label="Loading requests" aria-busy="true" className="space-y-4"><div className="skeleton h-48 w-full" /><div className="skeleton h-24 w-full" /></div>}
     {requests?.length === 0 && <section className="request-glass card card-border p-6"><h2 className="text-xl font-semibold">No requests yet</h2><p className="mt-2 text-sm text-base-content/70">Explore campus services and send a private request when you’re ready.</p><Link href="/" className="btn btn-primary mt-4 self-start">Find your support</Link></section>}
-    <div className="space-y-5">{requests?.map(request => <StudentRequestCard key={request.id} request={request} busy={busy} onCancel={cancel}>
+    <div className="space-y-5">{displayRequests?.map(request => <StudentRequestCard key={request.id} request={request} busy={busy} onCancel={cancel}>
       {request.bookable && <div className="mt-5 border-t border-base-300 pt-5"><button type="button" className={`btn w-full sm:w-auto ${openFor === request.id ? "btn-ghost" : "btn-primary"}`} disabled={busy || loadingSlots} aria-expanded={openFor === request.id} aria-controls={`slots-${request.id}`} onClick={() => openFor === request.id ? setOpenFor(null) : void showSlots(request.id)}>{openFor === request.id ? "Hide available times" : "Choose a time"}</button>
         {openFor === request.id && <div id={`slots-${request.id}`} className="booking-stage mt-5 min-w-0">{loadingSlots ? <div className="skeleton h-40 w-full" role="status" aria-label="Loading appointment times" /> : slotsError ? <div role="alert" className="space-y-3"><p>We could not load available times.</p><button type="button" className="btn" onClick={() => void showSlots(request.id)}>Retry loading times</button></div> : <BookingTimePicker slots={slots} busy={busy} onConfirm={id => void book(request.id, id)} />}</div>}
       </div>}
     </StudentRequestCard>)}</div>
-    <aside className="request-glass card card-border p-5 sm:p-8"><h2 className="font-semibold">Your details stay private</h2><p className="mt-2 max-w-prose text-sm text-base-content/70">Request content is not repeated on this dashboard. Only the practitioners of your chosen service can read it.</p></aside>
+    </div><aside className="requests-context space-y-5">
+      <section className="booking-scene request-glass card card-border" aria-label="Campus wellbeing appointments"><div><h2 className="text-2xl font-semibold tracking-tight">One step at a time.</h2><p>Follow your requests and choose a time that works for you after a practitioner has reviewed your request.</p>{requests && requests.length > 0 && <div className="dashboard-summary"><span><strong>{requests.length}</strong> {requests.length === 1 ? "request" : "requests"}</span><span><strong>{requests.filter(request => request.bookable).length}</strong> ready to book</span><span><strong>{requests.filter(request => request.appointment).length}</strong> booked</span></div>}</div></section>
+      <section className="request-glass card card-border p-5 sm:p-8"><h2 className="font-semibold">Your details stay private</h2><p className="mt-2 max-w-prose text-sm text-base-content/70">Request content is not repeated on this dashboard. Only the practitioners of your chosen service can read it.</p></section>
+    </aside></div>
   </div>;
 }
 

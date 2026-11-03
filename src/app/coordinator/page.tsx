@@ -36,11 +36,14 @@ export default function CoordinatorPage() {
   const openAcute = rows.filter((r) => r.acute && (r.status === "submitted" || r.status === "in_review"));
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Intake overview</h1>
+    <div className="staff-page space-y-6">
+      <header className="route-intro"><h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Intake overview</h1>
       <p className="text-sm text-base-content/70">
         Operational metadata across all services. You never see what a student wrote. Urgent requests are listed first.
       </p>
+      </header>
+
+      <div className="staff-summary"><p><strong>{rows.length}</strong><span>Total requests</span></p><p><strong>{openAcute.length}</strong><span>Urgent follow-ups</span></p><p><strong>{rows.filter(row => row.status === "in_review").length}</strong><span>In review</span></p></div>
 
       <p
         role="status"
