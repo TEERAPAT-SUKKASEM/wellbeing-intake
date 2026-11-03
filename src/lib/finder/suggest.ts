@@ -1,13 +1,13 @@
 import "server-only";
 import { env } from "@/lib/env";
 import { db } from "@/lib/supabase/admin";
-import { rankWithAi } from "@/lib/finder/ai";
+import { isPromptInjection, rankWithAi } from "@/lib/finder/ai";
 import { rankByKeywords, type CatalogueEntry } from "@/lib/finder/keywords";
 
 export type SuggestResult = {
   mode: "ai" | "fallback";
   /** Why the fallback answered; logged, never shown. */
-  reason?: "disabled" | "budget_exhausted" | "ai_unavailable";
+  reason?: "prompt_injection_blocked" | "disabled" | "budget_exhausted" | "ai_unavailable";
   serviceIds: string[];
 };
 
@@ -21,6 +21,9 @@ export async function suggest(text: string): Promise<SuggestResult> {
     reason,
     serviceIds: rankByKeywords(text, catalogue),
   });
+
+  // Checked before the budget, so a blocked attack does not spend the shared daily cap.
+  if (isPromptInjection(text)) return fallback("prompt_injection_blocked");
 
   // No flag or no key means no AI path at all — and no budget spent on a call that cannot happen.
   if (!env.aiFinderEnabled || !env.llmApiKey) return fallback("disabled");
