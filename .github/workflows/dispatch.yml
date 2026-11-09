@@ -1,9 +1,8 @@
 name: Dispatch & keep-alive
 
-# One call does both jobs (PRD Section 14): it touches the database — clearing Supabase Free's
-# ~7-day inactivity pause (risk R-1) — and it enqueues due reminders and retries pending webhook
-# deliveries (NFR-17). Scheduled workflows can run late; deliveries are also attempted inline
-# right after booking and cancellation.
+# One call does both jobs: it touches the database, clearing Supabase Free's ~7-day inactivity
+# pause, and it retries pending webhook deliveries. Scheduled workflows can run late; deliveries
+# are also attempted inline right after a practitioner's decision or a cancellation.
 #
 # Until the app is deployed and the APP_URL / DISPATCH_TOKEN repository secrets are set, every
 # step is skipped, so the schedule never produces a failing run.

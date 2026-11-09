@@ -2,29 +2,21 @@ import "server-only";
 import { env } from "@/lib/env";
 import { db } from "@/lib/supabase/admin";
 import { CORRELATION_HEADER } from "@/lib/http";
-import {
-  REMINDER_MESSAGE,
-  SIGNATURE_HEADER,
-  TIMESTAMP_HEADER,
-  buildEnvelope,
-  sign,
-} from "@/lib/events/contract";
+import { EVENT_ID_HEADER, SIGNATURE_HEADER, TIMESTAMP_HEADER, buildEventBody, sign } from "@/lib/events/contract";
 
-// NFR-17 / K-18..K-20: enqueue reminders that reached their lead time, then deliver
-// pending outbox rows as signed webhooks with exponential backoff.
+// Delivers pending outbox rows as signed webhooks with exponential backoff. The row was written in the
+// same transaction as the decision, so a Hub outage can delay an event but never lose it or block anyone.
 
 type OutboxRow = {
   event_id: string;
   type: string;
   reference: string;
-  subject: string | null;
   payload: unknown;
   occurred_at: string;
   attempts: number;
 };
 
 export type DispatchSummary = {
-  enqueued: number;
   claimed: number;
   delivered: number;
   retrying: number;
@@ -34,23 +26,16 @@ export type DispatchSummary = {
 const DELIVERY_TIMEOUT_MS = 5000;
 
 function logDelivery(entry: Record<string, unknown>) {
-  // eventId, type, attempt, status — never subject or data (NFR-07).
+  // Event id, type, attempt and status only.
   console.log(JSON.stringify({ t: new Date().toISOString(), svc: "wellbeing", kind: "webhook", ...entry }));
 }
 
 async function deliver(row: OutboxRow, cid: string): Promise<number> {
-  const rawBody = JSON.stringify(
-    buildEnvelope({
-      event_id: row.event_id,
-      type: row.type,
-      occurred_at: row.occurred_at,
-      subject: row.subject ?? "",
-      payload: row.payload,
-    }),
-  );
+  const rawBody = JSON.stringify(buildEventBody({ type: row.type, payload: row.payload }));
   const timestamp = String(Math.floor(Date.now() / 1000));
   const headers: Record<string, string> = {
     "content-type": "application/json",
+    [EVENT_ID_HEADER]: row.event_id,
     [SIGNATURE_HEADER]: sign(rawBody, timestamp, env.hubSigningSecret),
     [TIMESTAMP_HEADER]: timestamp,
     [CORRELATION_HEADER]: cid,
@@ -67,14 +52,7 @@ async function deliver(row: OutboxRow, cid: string): Promise<number> {
 }
 
 export async function dispatch(cid: string, limit = 20): Promise<DispatchSummary> {
-  const summary: DispatchSummary = { enqueued: 0, claimed: 0, delivered: 0, retrying: 0, parked: 0 };
-
-  const enq = await db().rpc("enqueue_due_reminders", {
-    p_lead: `${env.reminderLeadHours} hours`,
-    p_message: REMINDER_MESSAGE,
-  });
-  if (enq.error) throw new Error("enqueue_failed");
-  summary.enqueued = Number(enq.data ?? 0);
+  const summary: DispatchSummary = { claimed: 0, delivered: 0, retrying: 0, parked: 0 };
 
   if (!env.hubWebhookUrl) return summary; // nothing to deliver to yet; rows wait safely in the outbox
 
@@ -122,10 +100,10 @@ export async function dispatch(cid: string, limit = 20): Promise<DispatchSummary
   return summary;
 }
 
-/** Best-effort inline attempt right after a booking or cancellation commits. Never throws. */
+/** Best-effort inline attempt right after a decision commits. Never throws. */
 export async function dispatchInline(cid: string): Promise<void> {
   try {
-    // Small batch: a user's booking or cancellation must never wait on a full delivery run.
+    // Small batch: a practitioner's click must never wait on a full delivery run.
     await dispatch(cid, 3);
   } catch {
     // The event is already safe in the outbox; the scheduled run will pick it up.

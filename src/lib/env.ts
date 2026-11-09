@@ -1,6 +1,6 @@
 import "server-only";
 
-// Every secret and switch is server-only: nothing here carries a NEXT_PUBLIC_ prefix (R-2).
+// Every secret and switch is server-only: nothing here carries a NEXT_PUBLIC_ prefix.
 
 function required(name: string): string {
   const v = process.env[name];
@@ -10,6 +10,11 @@ function required(name: string): string {
 
 function optional(name: string, fallback = ""): string {
   return process.env[name] ?? fallback;
+}
+
+function number(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return process.env[name] && Number.isFinite(parsed) ? parsed : fallback;
 }
 
 export const env = {
@@ -23,7 +28,8 @@ export const env = {
     return required("SUPABASE_SERVICE_ROLE_KEY");
   },
 
-  /** BR-26: "fixture" (Supabase Auth demo users) or "campus" (Team 01 tokens). */
+  // Staff sign-in. Students never sign in.
+  /** "fixture" (Supabase Auth demo accounts) or "campus" (identity provider tokens). */
   get identityMode(): "fixture" | "campus" {
     return optional("IDENTITY_MODE", "fixture") === "campus" ? "campus" : "fixture";
   },
@@ -37,12 +43,35 @@ export const env = {
     return optional("IDENTITY_AUDIENCE", "wellbeing");
   },
 
-  /** Origin allowed on cookie-authenticated writes (NFR-19). Empty = the request's own origin. */
+  /** Origin allowed on cookie-authenticated writes. Empty = the request's own origin. */
   get appOrigin() {
     return optional("APP_ORIGIN");
   },
 
-  // Outbound webhook to the Notification Hub (NFR-17)
+  /** Turns an Idempotency-Key into a repeatable access key, so a retried submit gets the same key back. */
+  get accessKeySecret() {
+    return required("ACCESS_KEY_SECRET");
+  },
+
+  // Anonymous abuse limits. Per-address counters live in memory only and are never stored or logged.
+  get requestsPerIp() {
+    return number("RATE_REQUESTS_PER_IP", 5);
+  },
+  get keyFailuresPerIp() {
+    return number("RATE_KEY_FAILURES_PER_IP", 20);
+  },
+  get triageChecksPerIp() {
+    return number("RATE_TRIAGE_CHECKS_PER_IP", 10);
+  },
+  get requestsPerHour() {
+    return number("RATE_REQUESTS_PER_HOUR", 60);
+  },
+  /** How far ahead a student can book. */
+  get bookingHorizonDays() {
+    return number("BOOKING_HORIZON_DAYS", 30);
+  },
+
+  // Outbound webhook to the Notification Hub
   get hubWebhookUrl() {
     return optional("HUB_WEBHOOK_URL");
   },
@@ -60,24 +89,21 @@ export const env = {
   get dispatchToken() {
     return required("DISPATCH_TOKEN");
   },
-  get reminderLeadHours() {
-    return Number(optional("REMINDER_LEAD_HOURS", "24"));
-  },
   get webhookMaxAttempts() {
-    return Number(optional("WEBHOOK_MAX_ATTEMPTS", "6"));
+    return number("WEBHOOK_MAX_ATTEMPTS", 6);
   },
   get webhookBackoffBaseSeconds() {
-    return Number(optional("WEBHOOK_BACKOFF_BASE_SECONDS", "30"));
+    return number("WEBHOOK_BACKOFF_BASE_SECONDS", 30);
   },
 
-  // FR-23 helper
-  get aiFinderEnabled() {
-    return optional("AI_FINDER_ENABLED", "false") === "true";
+  // AI urgency assessment
+  get aiTriageEnabled() {
+    return optional("AI_TRIAGE_ENABLED", "false") === "true";
   },
   get llmApiKey() {
     return optional("LLM_API_KEY");
   },
-  // Groq (OpenAI-compatible API): free tier, no card — PRD C-04. `||` so an empty value means "default".
+  // Groq (OpenAI-compatible API): free tier, no card. `||` so an empty value means "default".
   get llmModel() {
     return optional("LLM_MODEL") || "openai/gpt-oss-20b";
   },
@@ -85,10 +111,10 @@ export const env = {
     return optional("LLM_BASE_URL") || "https://api.groq.com/openai/v1";
   },
   get aiDailyBudget() {
-    return Number(optional("AI_DAILY_BUDGET", "200"));
+    return number("AI_DAILY_BUDGET", 200);
   },
   get aiTimeoutMs() {
-    return Number(optional("AI_TIMEOUT_MS", "3000"));
+    return number("AI_TIMEOUT_MS", 3000);
   },
 
   get mockHubEnabled() {

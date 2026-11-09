@@ -1,79 +1,71 @@
 /**
- * Seed fixtures (BR-21) and the NFR-09 reset procedure in one command:
- *   pnpm seed        — destroy the whole dataset, then load demo fixtures
+ * Seed fixtures and the dataset reset in one command:
+ *   pnpm seed        destroy the whole dataset, then load demo fixtures
  *
- * Demo data only (BR-18): every person here is fictional. Never point this at real records.
+ * Demo data only. Staff accounts here are fictional. Students are anonymous, so there are none to seed.
  */
 import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
-import { requireDbTarget } from "./lib/db-target";
+import { checkDbTarget, requireDbTarget } from "./lib/db-target";
 
 config({ path: ".env.local" });
 config({ path: ".env" });
 
+const DEFAULT_PASSWORD = "demo-password-16";
+
 const url = process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const password = process.env.SEED_PASSWORD ?? "demo-password-16";
+const password = process.env.SEED_PASSWORD ?? DEFAULT_PASSWORD;
 if (!url || !serviceKey) {
   console.error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (see .env.example).");
   process.exit(1);
 }
+const argv = process.argv.slice(2);
 requireDbTarget({
   supabaseUrl: url,
-  argv: process.argv.slice(2),
+  argv,
   command: "pnpm seed",
   danger: "It deletes every table and every login in that database.",
 });
+// Anyone can now post a note without signing in, and staff logins can read those notes. This password
+// is printed in a public repository, so it must never protect a hosted database.
+if (!checkDbTarget(url, argv).local && password === DEFAULT_PASSWORD) {
+  console.error("Refusing to run pnpm seed: set SEED_PASSWORD to a private value for a hosted database.");
+  process.exit(1);
+}
 
 const db = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
 const SERVICES = [
   {
-    slug: "counselling",
-    name: "Counselling",
-    what_for: "Talking through stress, low mood, anxiety, relationships, grief, or anything that is weighing on you. You do not need a diagnosis or a 'big enough' problem.",
-    first_session: "A relaxed 50-minute conversation with a counsellor about what is going on and what might help. Nothing is decided for you.",
-    who_will_know: "Only the counsellors of this service. Not your lecturers, not your parents, not other students.",
-    keywords: ["stress", "stressed", "anxiety", "anxious", "worry", "panic", "sad", "low mood", "depressed", "lonely", "grief", "relationship", "breakup", "family", "overwhelmed", "burnout", "homesick", "talk", "counsellor", "therapy", "exam stress", "cannot cope"],
+    id: "srv_academic_stress",
+    name: "Academic Stress Counselling",
+    description: "Talk through exam pressure, deadlines, study worries or feeling behind.",
+    duration_minutes: 45,
   },
   {
-    slug: "health-clinic",
-    name: "Health clinic",
-    what_for: "Everyday physical health: vaccinations and flu shots, feeling unwell, minor injuries, medical certificates, and general health questions.",
-    first_session: "A 15 to 20 minute visit with a campus nurse. Bring your student ID.",
-    who_will_know: "Only the nurses of the health clinic.",
-    keywords: ["vaccine", "vaccination", "flu shot", "flu", "fever", "cold", "cough", "sick", "unwell", "injury", "headache", "stomach", "medical certificate", "certificate", "nurse", "allergy", "prescription", "check up"],
+    id: "srv_general_counselling",
+    name: "General Counselling",
+    description: "Anything weighing on you: low mood, anxiety, relationships, family or grief. No problem is too small.",
+    duration_minutes: 45,
   },
   {
-    slug: "physiotherapy",
-    name: "Physiotherapy",
-    what_for: "Aches, sports injuries, back and neck pain from study, and recovery after an injury.",
-    first_session: "A 30-minute assessment of the problem area and a first set of exercises.",
-    who_will_know: "Only the physiotherapists of this service.",
-    keywords: ["back pain", "neck pain", "shoulder", "knee", "ankle", "sprain", "sports injury", "posture", "muscle", "physio", "rehab", "stretch", "pain"],
-  },
-  {
-    slug: "wellbeing-advising",
-    name: "Wellbeing advising",
-    what_for: "Practical help with sleep, study-life balance, money worries, settling in, and finding the right support on or off campus.",
-    first_session: "A 30-minute chat with a wellbeing officer to map out what would make things easier.",
-    who_will_know: "Only the wellbeing officers of this service.",
-    keywords: ["sleep", "sleeping", "insomnia", "tired", "balance", "time management", "money", "finance", "budget", "settling in", "international", "visa", "motivation", "procrastination", "habits", "wellbeing", "not sure"],
+    id: "srv_urgent_drop_in",
+    name: "Urgent Drop-in",
+    description: "A shorter, sooner conversation when something can't wait. In an emergency, call the emergency numbers instead.",
+    duration_minutes: 30,
   },
 ];
 
-type SeedUser = { email: string; name: string; kind: "student" | "staff"; role: "student" | "practitioner" | "coordinator"; service?: string };
+// One shared calendar: Monday to Friday, 09:00-17:00 campus time. Weekday 0 is Sunday.
+const WINDOWS = [1, 2, 3, 4, 5].map((weekday) => ({ weekday, start_time: "09:00", end_time: "17:00" }));
 
-const USERS: SeedUser[] = [
-  { email: "student.a@demo.test", name: "Demo Student A", kind: "student", role: "student" },
-  { email: "student.b@demo.test", name: "Demo Student B", kind: "student", role: "student" },
-  { email: "student.c@demo.test", name: "Demo Student C", kind: "student", role: "student" },
-  { email: "counsellor.1@demo.test", name: "Demo Counsellor One", kind: "staff", role: "practitioner", service: "counselling" },
-  { email: "counsellor.2@demo.test", name: "Demo Counsellor Two", kind: "staff", role: "practitioner", service: "counselling" },
-  { email: "nurse.1@demo.test", name: "Demo Nurse One", kind: "staff", role: "practitioner", service: "health-clinic" },
-  { email: "physio.1@demo.test", name: "Demo Physio One", kind: "staff", role: "practitioner", service: "physiotherapy" },
-  { email: "wellbeing.1@demo.test", name: "Demo Wellbeing Officer", kind: "staff", role: "practitioner", service: "wellbeing-advising" },
-  { email: "coordinator@demo.test", name: "Demo Intake Coordinator", kind: "staff", role: "coordinator" },
+type SeedStaff = { email: string; name: string; role: "practitioner" | "admin" };
+
+const STAFF: SeedStaff[] = [
+  { email: "practitioner.1@demo.test", name: "Demo Practitioner One", role: "practitioner" },
+  { email: "practitioner.2@demo.test", name: "Demo Practitioner Two", role: "practitioner" },
+  { email: "admin@demo.test", name: "Demo Administrator", role: "admin" },
 ];
 
 function fail(step: string, error: unknown): never {
@@ -82,7 +74,7 @@ function fail(step: string, error: unknown): never {
 }
 
 async function main() {
-  // 1. NFR-09: destroy the whole dataset.
+  // 1. Destroy the whole dataset.
   const reset = await db.rpc("reset_demo_data");
   if (reset.error) fail("reset_demo_data", reset.error);
 
@@ -93,53 +85,35 @@ async function main() {
     if (del.error) fail(`delete auth user ${u.email}`, del.error);
   }
 
-  // 2. Services.
-  const services = await db.from("service").insert(SERVICES).select("id, slug");
+  // 2. Services and opening hours. Slots are calculated from these, so none are stored.
+  const services = await db.from("service").insert(SERVICES);
   if (services.error) fail("insert services", services.error);
-  const serviceId = new Map(services.data.map((s) => [s.slug as string, s.id as string]));
+  const windows = await db.rpc("set_availability", { p_windows: WINDOWS });
+  if (windows.error) fail("set availability", windows.error);
 
-  // 3. Fixture identities (Supabase Auth) + the minimal app_user rows.
-  const practitionerIds: string[] = [];
-  for (const u of USERS) {
+  // 3. Staff identities (Supabase Auth) and their minimal staff rows.
+  for (const s of STAFF) {
     const created = await db.auth.admin.createUser({
-      email: u.email,
+      email: s.email,
       password,
       email_confirm: true,
-      app_metadata: { kind: u.kind },
-      user_metadata: { display_name: u.name },
+      app_metadata: { kind: "staff" },
+      user_metadata: { display_name: s.name },
     });
-    if (created.error || !created.data.user) fail(`create auth user ${u.email}`, created.error);
+    if (created.error || !created.data.user) fail(`create auth user ${s.email}`, created.error);
 
-    const row = await db
-      .from("app_user")
-      .insert({
-        identity_ref: created.data.user.id,
-        email: u.email,
-        display_name: u.name,
-        role: u.role,
-        service_id: u.service ? serviceId.get(u.service) : null,
-      })
-      .select("id")
-      .single();
-    if (row.error) fail(`insert app_user ${u.email}`, row.error);
-    if (u.role === "practitioner") practitionerIds.push(row.data.id as string);
+    const row = await db.from("staff").insert({
+      identity_ref: created.data.user.id,
+      email: s.email,
+      display_name: s.name,
+      role: s.role,
+    });
+    if (row.error) fail(`insert staff ${s.email}`, row.error);
   }
 
-  // 4. Slots: three per practitioner. One falls inside the 24 h reminder lead time so the
-  //    reminder webhook can be demonstrated immediately after booking.
-  const hour = 60 * 60 * 1000;
-  const base = Date.now();
-  const slots = practitionerIds.flatMap((id, i) => [
-    { practitioner_id: id, start_at: new Date(base + (20 + i) * hour).toISOString() },
-    { practitioner_id: id, start_at: new Date(base + (72 + i) * hour).toISOString() },
-    { practitioner_id: id, start_at: new Date(base + (120 + i) * hour).toISOString() },
-  ]);
-  const insertedSlots = await db.from("slot").insert(slots);
-  if (insertedSlots.error) fail("insert slots", insertedSlots.error);
-
-  console.log(`Seeded ${SERVICES.length} services, ${USERS.length} demo users, ${slots.length} slots.`);
-  console.log(`Demo password for every account: ${password}`);
-  for (const u of USERS) console.log(`  ${u.role.padEnd(12)} ${u.email}`);
+  console.log(`Seeded ${SERVICES.length} services, ${WINDOWS.length} opening windows, ${STAFF.length} staff accounts.`);
+  for (const s of STAFF) console.log(`  ${s.role.padEnd(12)} ${s.email}`);
+  if (checkDbTarget(url!, argv).local) console.log(`Local demo password for every account: ${password}`);
 }
 
 main().catch((e) => fail("unexpected", e));

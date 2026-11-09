@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { env } from "@/lib/env";
 import { db } from "@/lib/supabase/admin";
-import { CORRELATION_HEADER, isUuid } from "@/lib/http";
-import { SIGNATURE_HEADER, TIMESTAMP_HEADER, envelope, verify } from "@/lib/events/contract";
+import { CORRELATION_HEADER, isSafeId } from "@/lib/http";
+import { SIGNATURE_HEADER, TIMESTAMP_HEADER, inboundEnvelope, verify } from "@/lib/events/contract";
 
-// Inbound webhook receiver: delivery receipts from the Notification Hub (Team 20).
-// Signature is verified over the RAW body before anything is parsed; consumption is
-// idempotent on eventId (platform PRD §4). Receipts carry only our opaque reference.
+// Inbound webhook receiver: delivery receipts from the Notification Hub.
+// Signature is verified over the RAW body before anything is parsed; consumption is idempotent on
+// eventId. Receipts carry only our opaque request id.
 //
 // Not wrapped by route(): it needs the raw body for verification.
 
@@ -38,7 +38,7 @@ export async function POST(req: Request): Promise<Response> {
 
   let parsed;
   try {
-    parsed = envelope.safeParse(JSON.parse(rawBody));
+    parsed = inboundEnvelope.safeParse(JSON.parse(rawBody));
   } catch {
     parsed = null;
   }
@@ -48,14 +48,13 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const event = parsed.data;
-  // A present-but-malformed reference is the sender's error (400), not ours: passing it on
-  // to the uuid column would turn it into a permanent 500 that the sender retries forever.
+  // A malformed reference is the sender's error (400), so the sender stops retrying.
   const rawReference = event.data.reference;
-  if (rawReference !== undefined && rawReference !== null && !isUuid(rawReference)) {
+  if (rawReference !== undefined && rawReference !== null && !isSafeId(rawReference)) {
     log({ signature: "verified", status: 400, outcome: "invalid_reference" });
     return reply(400, { error: "invalid_envelope" }, cid);
   }
-  const reference = isUuid(rawReference) ? rawReference : null;
+  const reference = isSafeId(rawReference) ? rawReference : null;
 
   const { data, error } = await db().rpc("record_inbound_event", {
     p_event: event.eventId,
@@ -71,6 +70,6 @@ export async function POST(req: Request): Promise<Response> {
 
   const firstTime = data === true;
   log({ signature: "verified", status: 200, eventId: event.eventId, type: event.type, duplicate: !firstTime });
-  // A duplicate is acknowledged, not reprocessed — the sender can stop retrying.
+  // A duplicate is acknowledged, not reprocessed: the sender can stop retrying.
   return reply(200, { received: true, duplicate: !firstTime }, cid);
 }

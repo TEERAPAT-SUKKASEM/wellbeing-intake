@@ -4,10 +4,11 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { env } from "@/lib/env";
 import { db } from "@/lib/supabase/admin";
 
-// BR-26 — the ONLY module that verifies a credential. Two modes, one shape:
-//   fixture: Supabase Auth demo users (development, tests, demo-day fallback)
-//   campus:  Team 01 Identity access tokens, verified against their published key set
-// Only the required contact and access claims leave this module (FR-03, BR-19).
+// Staff sign-in only: students are anonymous and never reach this module. It is the ONLY module that
+// verifies a credential. Two modes, one shape:
+//   fixture: Supabase Auth demo accounts (what the deployment runs)
+//   campus:  a campus identity provider's access tokens, verified against its published key set
+// Only the required contact and access claims leave this module.
 
 export type Identity = {
   identityRef: string;
@@ -120,7 +121,7 @@ async function resolveCampus(req: Request): Promise<IdentityResult> {
       audience: env.identityAudience,
     });
     if (!payload.sub) return { identity: null, via: null, setCookies };
-    // Assumption (BR-26): Team 01 tokens carry sub, email, name and a roles array.
+    // Assumption: campus tokens carry sub, email, name and a roles array. Never tested against a real provider.
     const roles = Array.isArray(payload.roles) ? payload.roles.map(String) : [];
     return {
       identity: {

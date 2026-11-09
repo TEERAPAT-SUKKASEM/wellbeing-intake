@@ -5,12 +5,12 @@ import { env } from "@/lib/env";
 import { resolveIdentity, type CookieToSet, type IdentityResult } from "@/lib/identity/adapter";
 import { resolveCaller, type Caller, type Role } from "@/lib/authz";
 
-// One wrapper gives every route the platform conventions (NFR-18, NFR-19) and the
-// default-deny contract (FR-21, NFR-01, NFR-02), so no handler implements them by hand.
+// One wrapper gives every route the platform conventions and the default-deny contract,
+// so no handler implements them by hand.
 
 export const CORRELATION_HEADER = "x-correlation-id";
 
-/** The single body used for "absent" AND "exists but not yours" (NFR-02, K-16). */
+/** The single body used for "absent", "wrong key" AND "not for your role". */
 export const NOT_FOUND_BODY = { error: "not_found" } as const;
 
 export class HttpError extends Error {
@@ -44,8 +44,9 @@ type RouteOptions<B> = {
   handler: (ctx: RouteCtx<B>) => Promise<HandlerResult>;
 };
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-export const isUuid = (v: unknown): v is string => typeof v === "string" && UUID_RE.test(v);
+const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+/** Ids in paths are opaque tokens such as req_3f9a or srv_academic_stress. */
+export const isSafeId = (v: unknown): v is string => typeof v === "string" && SAFE_ID_RE.test(v);
 
 function correlationId(req: Request): string {
   const incoming = req.headers.get(CORRELATION_HEADER);
@@ -79,7 +80,7 @@ function respond(
   return new Response(JSON.stringify(json), { status, headers });
 }
 
-/** NFR-07: logs carry method, path, status, role, timing — never a body, never content. */
+/** Logs carry method, path (no query string), status, role and timing: never a body, never content. */
 function log(entry: Record<string, unknown>) {
   console.log(JSON.stringify({ t: new Date().toISOString(), svc: "wellbeing", ...entry }));
 }
@@ -117,7 +118,7 @@ export function route<B = undefined>(opts: RouteOptions<B>) {
     try {
       const params = (await routeCtx?.params) ?? {};
       for (const value of Object.values(params)) {
-        if (!isUuid(value)) throw notFound();
+        if (!isSafeId(value)) throw notFound();
       }
 
       // Shares the wrapper's cookie list, so a public route (sign-in/out) can still set cookies.
@@ -153,7 +154,7 @@ export function route<B = undefined>(opts: RouteOptions<B>) {
         }
         const parsed = opts.body.safeParse(raw);
         if (!parsed.success) {
-          // Field names only — submitted values are never echoed (NFR-07).
+          // Field names only: submitted values are never echoed.
           const fields = [...new Set(parsed.error.issues.map((i) => i.path.join(".") || "(body)"))];
           throw new HttpError(400, { error: "validation_failed", fields });
         }

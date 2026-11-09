@@ -3,13 +3,12 @@ import { HttpError, route } from "@/lib/http";
 import { env } from "@/lib/env";
 import { sessionClient } from "@/lib/identity/adapter";
 
-// Fixture-mode sign-in/out (BR-26). In campus mode sign-in belongs to Team 01's Identity
-// service, so these endpoints answer 404 rather than pretend to be an identity provider.
+// Staff sign-in and sign-out, in fixture mode. In campus mode sign-in belongs to the identity
+// provider, so these endpoints answer 404 rather than pretend to be one. Students never sign in.
 
 const credentials = z.object({ email: z.email(), password: z.string().min(1).max(200) }).strict();
 
-// A tiny in-memory throttle on sign-in attempts (NFR-19). Per instance and demo-grade;
-// the gateway's rate limit is primary.
+// A tiny in-memory throttle on sign-in attempts. Per instance and demo-grade.
 const attempts = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 60_000;
 const MAX_ATTEMPTS = 10;

@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { config } from "dotenv";
 
 // Integration tests run against the local Supabase stack (`pnpm db:start`) on freshly
-// seeded demo data — the NFR-09 reset procedure is exercised on every run.
+// seeded demo data, so the reset procedure is exercised on every run.
 export default function setup() {
   config({ path: ".env.local" });
   config({ path: ".env" });

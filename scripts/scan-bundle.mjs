@@ -1,4 +1,4 @@
-// PRD R-2 / AC-5: fail if any server secret reached what the browser can download.
+// Fail if any server secret reached what the browser can download.
 // Run after `pnpm build`. Two roots:
 //   .next/static      — client JS/CSS: secret VALUES and forbidden NAMES are both checked
 //   .next/server/app  — only the prerendered artefacts served to browsers (.html, .rsc, .body,
@@ -18,6 +18,7 @@ const SECRET_VARS = [
   "HUB_INBOUND_SECRET",
   "HUB_MACHINE_TOKEN",
   "DISPATCH_TOKEN",
+  "ACCESS_KEY_SECRET",
   "LLM_API_KEY",
 ];
 // Names that must never appear in client code even when the value is unknown at scan time.

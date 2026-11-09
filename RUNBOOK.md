@@ -1,4 +1,4 @@
-# Runbook — Wellbeing Intake & Booking (Team 16)
+# Runbook — Wellbeing Campus Counselling Platform (Team 16)
 
 ## Ownership
 
@@ -21,13 +21,10 @@ If he is unavailable on demo day nobody else can change an environment variable 
 second member to the Supabase organisation (free) and as a GitHub collaborator before the demo.
 
 Partner contact: **Team 14 — Helpdesk** — Pupattararak Masomjit (6731503115) (they consume `GET /api/v1/services`).
-We are not paired with Team 01 Identity, Team 20 Notification Hub or Team 23 Gateway: identity runs
-in fixture mode and webhooks go to the built-in contract mock.
+We have no Notification Hub partner: webhooks go to the built-in contract mock. Staff sign in with seeded demo accounts.
 
-Acute-flagged requests (BR-04): owned by the intake coordinator until a practitioner marks them
-Escalated. Demo-world response time — **acknowledged within 1 hour during staffed demo
-sessions; policy owner Teerapat Sukkasem (confirmed for demo operations, BR-04).** The app itself
-never promises a response time: the Urgent path always shows the emergency contacts first.
+Urgent requests: pinned to the top of the practitioner queue. Students are anonymous, so **staff cannot contact
+them**. The app never promises a response time, and an Urgent result always shows the emergency contacts first.
 
 ## Health check
 
@@ -37,93 +34,125 @@ curl -s https://wellbeing-intake.vercel.app/api/v1/health
 # {"status":"degraded", ... "database":"down"}                              -> 503
 ```
 
-`/emergency` and the home page shell are static: they stay up even when this returns 503.
+`/emergency` is static and stays up even when this returns 503.
 
-Every log line is one JSON object with `cid` (correlation id). To trace one request end to end,
-filter Vercel function logs by that `cid`; webhook deliveries log `kind:"webhook"` with `eventId`,
-`attempt`, `status`, `outcome`.
+Every log line is one JSON object with `cid` (correlation id). To trace one request end to end, filter Vercel
+function logs by that `cid`. Webhook deliveries log `kind:"webhook"` with `eventId`, `attempt`, `status` and
+`outcome`; triage logs `kind:"triage"` with `mode` and `reason`. Our logs never hold a note, alias, urgency or key.
+Vercel's own request logs do record full URLs, which is why the web app sends the access key in a header.
+
+## Switching production to this version
+
+The site runs the previous design until this is done. **Step 3 destroys the old tables and logins.**
+
+1. Warn Team 14 first: `GET /services` changes shape and service names.
+2. Make sure the new screens are ready on the same branch. The old screens do not work with this API.
+3. Apply the schema to the linked project: `pnpm exec supabase db push`
+4. Load fixtures, with a **private** password that is shared only inside the team:
+   ```bash
+   SEED_PASSWORD=<private> pnpm exec tsx --env-file=.env.vercel scripts/seed.ts --confirm-remote=jtwrgfcmfghfklddyatv.supabase.co
+   ```
+5. In Vercel, add `ACCESS_KEY_SECRET` (`openssl rand -hex 24`, keep it stable) and `AI_TRIAGE_ENABLED=true`.
+   Remove `AI_FINDER_ENABLED` and `REMINDER_LEAD_HOURS`.
+6. Merge to `main`. Vercel deploys. Then work through the pre-demo checklist below.
+
+**To go back:** the old code is the git tag `v1-old-design`. Its database has to be rebuilt from its own two
+migrations and reseeded, because step 3 removes the old tables.
 
 ## Failure recovery
 
 ### Database paused (Supabase Free pauses after ~7 days idle) — most likely failure
-Symptom: health 503, every screen except `/` shell and `/emergency` errors.
-1. Supabase dashboard → project → **Restore**. Wait until active.
-2. `pnpm seed` against it if data was lost or stale.
-3. Confirm health 200. Check the *Dispatch & keep-alive* workflow is green — it is what prevents this.
+Symptom: health 503, every screen except `/emergency` errors.
+1. Supabase dashboard, then the project, then **Restore**. Wait until active.
+2. Confirm health 200. Check the *Dispatch & keep-alive* workflow is green: it is what prevents this.
+3. Only if data was lost: reseed as in step 4 above.
 
-### Webhook deliveries failing / parked
-Symptom: logs show `outcome:"retry_scheduled"` or `"parked"`; bookings still succeed (by design).
+### Webhook deliveries failing or parked
+Symptom: logs show `outcome:"retry_scheduled"` or `"parked"`. Decisions still succeed (by design).
 ```sql
-select event_id, type, attempts, last_status, next_attempt_at, failed_at
-  from outbound_event where delivered_at is null order by occurred_at;
+select event_id, type, reference, attempts, last_status, next_attempt_at, failed_at
+  from outbound_event where delivered_at is null and payload is not null order by occurred_at;
 ```
 - Retrying rows recover on their own once the Hub is back (exponential backoff).
-- Replay parked rows after the Hub is fixed:
+- Replay rows parked by the attempt cap once the Hub is fixed. `payload is not null` matters: rows with no payload
+  were deliberately neutralised by a later reschedule or cancellation and must never be sent.
   ```sql
   update outbound_event set failed_at = null, next_attempt_at = now()
-   where failed_at is not null and delivered_at is null;
+   where failed_at is not null and delivered_at is null and payload is not null;
   ```
-  then trigger a dispatch (below). `eventId` is unchanged, so the Hub de-duplicates.
-- A reminder whose appointment time has passed is pointless: leave it parked.
+  then trigger a dispatch (below). `X-Event-Id` is unchanged, so the Hub de-duplicates.
 
 ### Trigger a dispatch by hand
 ```bash
 curl -s -X POST https://wellbeing-intake.vercel.app/api/v1/internal/events/dispatch -H "Authorization: Bearer $DISPATCH_TOKEN"
-# {"enqueued":0,"claimed":1,"delivered":1,"retrying":0,"parked":0}
+# {"claimed":1,"delivered":1,"retrying":0,"parked":0}
 ```
 
-### AI helper down
-Nothing to do: the keyword fallback answers automatically and the response says `mode:"fallback"`;
-the log line (`kind:"finder"`) gives the reason — `prompt_injection_blocked`, `disabled`, `budget_exhausted` or `ai_unavailable`.
-- Provider is Groq (free tier: about 8,000 tokens per minute and 1,000 requests per day). Hitting the
-  per-minute limit returns `429` and recovers by itself within a minute (proven in A5 §6b).
+### AI down
+Nothing to do: requests still work, and the response says `triage_mode:"DETERMINISTIC_FALLBACK"`. The log line
+(`kind:"triage"`) gives the reason: `not_selected`, `prompt_injection_blocked`, `disabled`, `budget_exhausted`
+or `ai_unavailable`.
+- Provider is Groq (free tier: about 8,000 tokens per minute and 1,000 requests per day). Hitting the per-minute
+  limit returns `429` and recovers by itself within a minute.
 - Our own cap is `AI_DAILY_BUDGET` (200 calls per day); it resets at midnight UTC.
-- If Groq retires the model, the helper falls back silently: check https://console.groq.com/docs/models
-  and set `LLM_MODEL` in Vercel to a current one (default `openai/gpt-oss-20b`), then redeploy.
-- To force fallback (misbehaviour): set `AI_FINDER_ENABLED=false` in Vercel and redeploy.
+- If Groq retires the model, triage falls back silently: check https://console.groq.com/docs/models and set
+  `LLM_MODEL` in Vercel to a current one (default `openai/gpt-oss-20b`), then redeploy.
+- To turn AI off: set `AI_TRIAGE_ENABLED=false` in Vercel and redeploy.
 
-### Identity
-The deployment runs `IDENTITY_MODE=fixture` (seeded demo accounts); we are not paired with Team 01.
-State this openly at the demo. `campus` mode is untested against real Team 01 tokens.
+### The calendar is being flooded
+Symptom: slots disappear and the queue fills with junk. Anonymous submitting is limited per address and to
+`RATE_REQUESTS_PER_HOUR` (60) overall, but a determined script can still hold some slots.
+- Practitioners can reject junk requests from the queue, which frees the times immediately.
+- To clear them all at once:
+  ```sql
+  update appointment_request set status = 'REJECTED' where status = 'PENDING' and created_at > '<when it started>';
+  ```
+- Lower `RATE_REQUESTS_PER_HOUR` in Vercel and redeploy.
 
-### A secret leaked (service-role key, signing secret, dispatch token, LLM key)
-1. Rotate it at the source (Supabase → API settings; Groq console → API Keys; `openssl rand -hex 24` for the signing secrets and dispatch token).
+### A student lost their access key
+It cannot be recovered: only its hash is stored, and the student is anonymous. They can submit a new request. The
+old request keeps its time until a practitioner rejects it or the time passes.
+
+### A secret leaked (service-role key, signing secret, dispatch token, access key secret, LLM key)
+1. Rotate it at the source (Supabase API settings; Groq console, API Keys; `openssl rand -hex 24` for the others).
 2. Update Vercel env vars **and** GitHub Actions secrets. Redeploy.
 3. `pnpm build && pnpm scan:bundle` to confirm the client bundle is clean.
-4. Because data is seeded and disposable, run `pnpm seed` to discard anything written meanwhile.
+4. Rotating `ACCESS_KEY_SECRET` does not stop existing keys working. It only means a retry of an earlier submission
+   gets a key that does not match, so rotate it when no form is mid-submission.
 
-### Reset the whole dataset (NFR-09)
-`pnpm seed` — truncates every table, deletes every auth user, reloads fixtures. Local full rebuild:
-`pnpm db:reset`.
+### Reset the whole dataset
+Local: `pnpm seed`, or `pnpm db:reset` for a full rebuild. Hosted: step 4 above. Either way it truncates every
+table, deletes every auth user and reloads fixtures. A hosted database refuses the command unless the host is
+confirmed and the password is private.
 
 ## Deploy
 
-Vercel auto-deploys `main`; pull requests get previews (they share the one hosted database — reseed
-after testing on a preview). Schema changes: add a migration under `supabase/migrations`, then
-`pnpm exec supabase db push` against the linked project **before** merging code that needs it.
+Vercel auto-deploys `main`; pull requests get previews (they share the one hosted database). Schema changes: add a
+migration under `supabase/migrations`, then `pnpm exec supabase db push` against the linked project **before**
+merging code that needs it.
 
-Required Vercel env vars: everything in `.env.example` (no `NEXT_PUBLIC_` prefixes). Generate fresh
-values for `HUB_SIGNING_SECRET`, `HUB_INBOUND_SECRET` and `DISPATCH_TOKEN` (`openssl rand -hex 24`) —
-the app refuses empty or placeholder values. `MOCK_HUB_ENABLED=true` and `HUB_WEBHOOK_URL=<app>/api/v1/mock/hub` on the deployment (no Notification
-Hub partner); while it is true, the mock's outage switch (`PUT`) requires the `DISPATCH_TOKEN` bearer.
+Required Vercel env vars: everything in `.env.example` (no `NEXT_PUBLIC_` prefixes). The app refuses empty or
+placeholder secrets. `MOCK_HUB_ENABLED=true` and `HUB_WEBHOOK_URL=<app>/api/v1/mock/hub` on the deployment (no
+Notification Hub partner); while it is true, the mock's outage switch (`PUT`) requires the `DISPATCH_TOKEN` bearer.
 
-In the hosted Supabase project, **disable sign-ups** (Authentication → Sign In / Providers → turn off
-"Allow new users to sign up"). Accounts come from `pnpm seed` only (BR-21); the identity adapter also
-ignores any account that lacks the seeded `app_metadata.kind`.
+In the hosted Supabase project, **disable sign-ups** (Authentication, Sign In / Providers, turn off "Allow new users
+to sign up"). Staff accounts come from the seed only; an account with no `staff` row gets no access.
 
 Required GitHub Actions secrets: `APP_URL`, `DISPATCH_TOKEN`.
 
 ## Pre-demo checklist
 
-Last verified 2026-09-21 on https://wellbeing-intake.vercel.app — **re-check everything on demo day.**
+Not yet run on this version. **Check everything on demo day.**
 
-- [x] Supabase project active; `pnpm seed` run; health 200
-- [x] `pnpm test && pnpm test:integration` green; CI green on `main`
-- [x] `pnpm build && pnpm scan:bundle` clean
-- [x] Identity mode decided (fixture) and one sign-in tested in it
-- [x] One reminder delivered to the Hub target with a valid signature; no parked outbox rows
-- [x] Helper checked twice: `mode:"ai"` and `mode:"fallback"` (flag off, and provider rate-limited)
+- [ ] Supabase project active; fixtures loaded with a private password; health 200
+- [ ] `pnpm test && pnpm test:integration` green; CI green on `main`
+- [ ] `pnpm build && pnpm scan:bundle` clean
+- [ ] Student journey on the live site: pick a time, submit, save the key, check status, cancel
+- [ ] Practitioner journey: sign in, see Urgent first, approve, reschedule, reject
+- [ ] Buffer shown: book a time and see the next slot only after the buffer, on the student and practitioner screens
+- [ ] AI checked twice: `triage_mode:"AI_ASSISTED"`, and `DETERMINISTIC_FALLBACK` with the flag off
+- [ ] Urgent path: emergency contacts appear straight away
+- [ ] One `appointment.confirmed` delivered to the Hub target with a valid signature; no parked rows
 - [ ] Hosted Supabase: "Allow new users to sign up" turned off
-- [ ] No Vercel Analytics or Speed Insights enabled (NFR-04)
-- [ ] Scripted journey + urgent-escalation edge case rehearsed with zero failures
+- [ ] No Vercel Analytics or Speed Insights enabled
 - [ ] Screens checked for demo-only data before any screenshot is taken
