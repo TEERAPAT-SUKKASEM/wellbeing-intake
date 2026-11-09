@@ -4,109 +4,234 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "@/lib/client/api";
-import { UiIcon } from "@/components/UiIcon";
+import { UiIcon } from "./UiIcon";
 
-type Me = { role: "student" | "practitioner" | "coordinator"; displayName: string };
-const HOME: Record<Me["role"], { href: string; label: string }> = {
-  student: { href: "/requests", label: "My requests" },
-  practitioner: { href: "/practitioner", label: "My queue" },
-  coordinator: { href: "/coordinator", label: "Overview" },
-};
+type Me = { role: "practitioner" | "admin"; displayName: string };
 
-function Brand() {
-  return <Link href="/" aria-label="Campus Health & Wellbeing home" className="brand flex items-center gap-3 font-semibold leading-tight"><span aria-hidden="true" className="brand-mark flex size-10 shrink-0 items-center justify-center"><UiIcon name="wellbeing" className="size-6" /></span><span>Campus<span className="block text-xs font-normal tracking-wide text-base-content/70">Health &amp; Wellbeing</span></span></Link>;
-}
-
-export function SiteHeader({ preview = false, children }: { preview?: boolean; children: ReactNode }) {
-  const router = useRouter();
+export function SiteHeader({
+  preview = false,
+  children,
+}: {
+  preview?: boolean;
+  children: ReactNode;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [open, setOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
+  const [signingOut, setSigningOut] = useState(false);
+  const [error, setError] = useState("");
+  const dialog = useRef<HTMLDialogElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const staffPage =
+    pathname === "/practitioner" ||
+    pathname === "/admin" ||
+    pathname === "/sign-in";
   useEffect(() => {
-    if (preview) return;
+    if (preview && !staffPage) return;
     let alive = true;
-    api<Me>("/me").then(r => { if (alive) setMe(r.ok ? r.data : null); });
-    return () => { alive = false; };
-  }, [pathname, preview]);
-
+    api<Me>("/me").then((r) => {
+      if (alive) setMe(r.ok ? r.data : null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [pathname, preview, staffPage]);
   useEffect(() => {
-    const desktop = window.matchMedia("(min-width: 1024px)");
-    function closeOnDesktop() { if (desktop.matches) dialogRef.current?.close(); }
-    desktop.addEventListener("change", closeOnDesktop);
-    return () => desktop.removeEventListener("change", closeOnDesktop);
+    const desktop = window.matchMedia("(min-width: 1101px)");
+    const close = () => {
+      if (desktop.matches) dialog.current?.close();
+    };
+    desktop.addEventListener("change", close);
+    return () => desktop.removeEventListener("change", close);
   }, []);
-
+  const brand = (
+    <Link href="/" className="wellbeing-brand" aria-label="Wellbeing home">
+      <span className="brand-symbol">
+        <UiIcon name="wellbeing" className="size-6" />
+      </span>
+      <span>
+        Wellbeing
+        <span className="brand-description">Campus counselling</span>
+      </span>
+    </Link>
+  );
+  const links = [
+    {
+      id: "book",
+      href: "/",
+      label: "Book an appointment",
+      description: "Choose a service and time",
+      icon: "calendar" as const,
+      active: pathname === "/" || pathname === "/request/new",
+    },
+    {
+      href: "/requests",
+      id: "track",
+      label: "Track a request",
+      description: "Use your private access key",
+      icon: "shield" as const,
+      active: pathname === "/requests",
+    },
+    ...(me?.role === "practitioner"
+      ? [
+          {
+            href: "/practitioner",
+            id: "workspace",
+            label: "Queue & schedule",
+            description: "Review and manage appointments",
+            icon: "talk" as const,
+            active: pathname === "/practitioner",
+          },
+        ]
+      : me?.role === "admin"
+        ? [
+            {
+              href: "/admin",
+              id: "workspace",
+              label: "Services & hours",
+              description: "Manage services and opening hours",
+              icon: "grid" as const,
+              active: pathname === "/admin",
+            },
+          ]
+        : []),
+  ];
   async function signOut() {
-    await api("/session", { method: "DELETE" });
+    setSigningOut(true);
+    setError("");
+    const r = await api("/session", { method: "DELETE" });
+    setSigningOut(false);
+    if (!r.ok) {
+      setError("We could not sign you out. Please try again.");
+      return;
+    }
+    dialog.current?.close();
     setMe(null);
     router.replace("/");
     router.refresh();
   }
-
-  const links = preview ? [{ href: "/preview/requests", label: "My requests" }] : me ? [HOME[me.role]] : [];
-  const pageTitle = pathname === "/" ? "Campus services" : pathname === "/sign-in" ? "Sign in" : pathname === "/request/new" ? "New support request" : pathname === "/practitioner" ? "Practitioner workspace" : pathname === "/coordinator" ? "Intake overview" : pathname === "/emergency" ? "Emergency contacts" : "My requests";
-
-  function menu(mobile = false) {
-    return <ul className="menu w-full gap-2 p-0">{links.map(link => <li key={link.href}><Link href={link.href} title={collapsed && !mobile ? link.label : undefined} aria-current={pathname === link.href ? "page" : undefined} className="flex min-h-11 items-center gap-3 px-3 py-2" onClick={() => { if (mobile) dialogRef.current?.close(); }}><UiIcon name="calendar" className="size-5" /><span className="nav-label">{link.label}</span></Link></li>)}</ul>;
-  }
-
-  function services(mobile = false) {
-    const close = () => { if (mobile) dialogRef.current?.close(); };
-    return <nav aria-label={mobile ? "Mobile campus services" : "Campus services"} className="sidebar-services">
-      <h2>Campus services</h2>
-      {([
-        ["counselling", "Counselling", "talk"], ["health-clinic", "Health clinic", "health"], ["physiotherapy", "Physiotherapy", "movement"], ["wellbeing-advising", "Wellbeing advising", "wellbeing"],
-      ] as const).map(([slug, label, icon]) => <Link key={slug} href={`/#service-${slug}`} title={collapsed && !mobile ? label : undefined} onClick={close}><span className="service-dot" aria-hidden="true" /><UiIcon name={icon} className="sidebar-service-icon size-5" /><span className="nav-label">{label}</span></Link>)}
-      <Link href="/emergency" className="sidebar-emergency" title={collapsed && !mobile ? "Emergency contacts" : undefined} aria-current={pathname === "/emergency" ? "page" : undefined} onClick={close}><UiIcon name="phone" className="size-5" /><span className="nav-label">Emergency contacts</span></Link>
-    </nav>;
-  }
-
   function account(mobile = false) {
-    if (preview) return null;
-    return me ? <button type="button" title={collapsed && !mobile ? "Sign out" : undefined} className={`account-signout btn ${mobile ? "mt-4 w-full" : ""}`} onClick={() => { if (mobile) dialogRef.current?.close(); void signOut(); }}><UiIcon name="sign-out" className="account-icon size-5" /><span className="account-label">Sign out</span></button> : <Link title={collapsed && !mobile ? "Sign in" : undefined} className={`btn ${mobile ? "mt-4 w-full" : ""}`} href="/sign-in" onClick={() => { if (mobile) dialogRef.current?.close(); }}><UiIcon name="sign-in" className="account-icon size-5" /><span className="account-label">Sign in</span></Link>;
+    return me ? (
+      <button
+        className={`btn btn-ghost ${mobile ? "drawer-account-link" : ""}`}
+        disabled={signingOut}
+        onClick={() => void signOut()}
+      >
+        {mobile && <UiIcon name="sign-out" />}
+        {signingOut ? "Signing out…" : "Sign out"}
+      </button>
+    ) : (
+      <Link href="/sign-in" className={`staff-link ${mobile ? "drawer-account-link" : ""}`} aria-current={pathname === "/sign-in" ? "page" : undefined}>
+        <UiIcon name="sign-in" /><span className="staff-entry-title">Staff sign in</span>
+      </Link>
+    );
   }
-
   return (
-    <>
-      <div className="workspace-shell" data-nav-collapsed={collapsed}>
-        <aside id="desktop-sidebar" className="workspace-sidebar retreat-sidebar hidden lg:flex" aria-label="Campus workspace">
-          <button type="button" className="sidebar-toggle btn btn-ghost btn-square" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed} aria-controls="desktop-sidebar" title={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(value => !value)}><UiIcon name="chevron" className="size-5" /></button>
-          <Brand />
-          {links.length > 0 && <nav aria-label="Main navigation" className="workspace-nav">{menu()}</nav>}
-          {services()}
-          <div className="sidebar-bottom"><UiIcon name="shield" className="size-6" /><h2>Your space for support.</h2><p>Explore your options. Take the next step when you’re ready.</p>{account()}{preview && <span className="badge badge-outline">UI sample</span>}</div>
-        </aside>
-        <div className="workspace-body flex min-h-dvh min-w-0 flex-col">
-        <header className="workspace-topbar hidden lg:flex"><div><span>Campus wellbeing</span><span aria-hidden="true">/</span><strong>{pageTitle}</strong></div>{me ? <span className="account-name text-sm"><span aria-hidden="true" className="account-initials">{me.displayName.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("")}</span>{me.displayName}</span> : <span className="topbar-privacy"><UiIcon name="shield" className="size-4" />Browse without signing in</span>}</header>
-        <header className="retreat-sidebar retreat-mobile navbar justify-between gap-3 border-b px-5 py-2 lg:hidden">
-          <Brand />
-          <button ref={triggerRef} type="button" className="btn btn-ghost btn-square border-0" aria-label="Open navigation" aria-expanded={open} aria-controls="mobile-navigation" onClick={() => { dialogRef.current?.showModal(); setOpen(true); }}><svg aria-hidden="true" className="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
-        </header>
-        {children}
-        </div>
-      </div>
-      <dialog ref={dialogRef} id="mobile-navigation" aria-label="Navigation menu" className="modal justify-items-start" onClick={event => { if ((event.target as HTMLElement).closest("a")) dialogRef.current?.close(); }} onKeyDown={event => {
-        if (event.key !== "Tab") return;
-        const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'));
-        const first = items[0];
-        const last = items[items.length - 1];
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-      }} onClose={() => { setOpen(false); if (!window.matchMedia("(min-width: 1024px)").matches) triggerRef.current?.focus(); }}>
-        <div className="retreat-sidebar modal-box m-0 h-dvh max-h-dvh w-72 max-w-[90vw] rounded-none border-r border-base-300 p-5">
-          <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between gap-2"><Brand /><button type="button" className="btn btn-ghost btn-square shrink-0 border-0" aria-label="Close navigation" onClick={() => dialogRef.current?.close()}><UiIcon name="close" /></button></div>
-            {links.length > 0 && <nav aria-label="Mobile navigation" className="mt-8">{menu(true)}</nav>}
-            {services(true)}
-            <div className="mt-auto border-t border-base-300 pt-5"><p className="px-3 text-sm font-semibold">Support at your pace</p><p className="mt-2 px-3 text-xs leading-relaxed text-base-content/70">Browse freely. You decide when you’re ready to take the next step.</p>{account(true)}{preview && <span className="badge badge-outline mt-4 ml-3">UI sample</span>}</div>
+    <div className="site-shell">
+      <header className="site-header">
+        <div className="site-header-inner navbar">
+          {brand}
+          <nav className="desktop-navigation" aria-label="Main navigation">
+            {links.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={link.active ? link.href === pathname ? "page" : "location" : undefined}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="header-actions">
+            <Link href="/emergency" className="emergency-nav" aria-label="Urgent help and emergency contacts" aria-current={pathname === "/emergency" ? "page" : undefined}>
+              <UiIcon name="phone" className="size-4" />
+              <span>Urgent help</span>
+            </Link>
+            <span className="desktop-account">{account()}</span>
+            <button
+              ref={trigger}
+              className="mobile-menu-button btn btn-ghost"
+              aria-label="Open navigation"
+              aria-expanded={open}
+              aria-controls="mobile-navigation"
+              onClick={() => {
+                dialog.current?.showModal();
+                setOpen(true);
+              }}
+            >
+              <svg
+                className="size-6"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                aria-hidden="true"
+              >
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+              <span className="mobile-menu-label">Menu</span>
+            </button>
           </div>
         </div>
-        <form method="dialog" className="modal-backdrop"><button aria-label="Dismiss navigation">Close</button></form>
+      </header>
+      {error && !open && (
+        <p role="alert" className="account-error">
+          {error}
+        </p>
+      )}
+      {children}
+      <dialog
+        ref={dialog}
+        id="mobile-navigation"
+        className="modal mobile-navigation"
+        aria-label="Navigation menu"
+        onClick={(e) => {
+          if (e.target === e.currentTarget || (e.target as HTMLElement).closest("a")) {
+            dialog.current?.close();
+          }
+        }}
+        onClose={() => {
+          setOpen(false);
+          trigger.current?.focus();
+        }}
+      >
+        <div className="modal-box">
+          <div className="mobile-menu-heading">
+            {brand}
+            <button
+              className="btn btn-ghost btn-square"
+              aria-label="Close navigation"
+              onClick={() => dialog.current?.close()}
+            >
+              <UiIcon name="close" />
+            </button>
+          </div>
+          <nav aria-label="Mobile navigation" className="drawer-navigation">
+            <ul className="menu">
+              {links.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="drawer-link"
+                    aria-label={link.label}
+                    aria-describedby={`drawer-${link.id}-detail`}
+                    aria-current={link.active ? link.href === pathname ? "page" : "location" : undefined}
+                  >
+                    <UiIcon name={link.icon} />
+                    <span><span className="drawer-link-title">{link.label}</span><span className="drawer-link-detail" id={`drawer-${link.id}-detail`}>{link.description}</span></span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+          <Link href="/emergency" className="drawer-urgent" aria-label="Urgent help and emergency contacts" aria-current={pathname === "/emergency" ? "page" : undefined}><UiIcon name="phone" /><span><span className="drawer-link-title">Urgent help</span><span className="drawer-link-detail">Emergency contacts</span></span></Link>
+          <div className="mobile-account">{me && <div className="drawer-identity"><p>{me.displayName}</p><span>{me.role === "admin" ? "Administrator" : "Practitioner"}</span></div>}{error && <p className="drawer-account-error" role="alert">{error}</p>}{account(true)}</div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button aria-label="Dismiss navigation">Close</button>
+        </form>
       </dialog>
-    </>
+    </div>
   );
 }

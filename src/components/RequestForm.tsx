@@ -1,314 +1,356 @@
 "use client";
-
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client/api";
-import { previewServices } from "@/lib/client/preview-services";
-import { CANNOT_HELP_NOW, EMERGENCY_CONTACTS } from "@/lib/emergency";
-import { ACUTE_LEVEL_ID, TRIAGE_LEVELS } from "@/lib/triage";
-import { UiIcon } from "@/components/UiIcon";
+import { sampleGuidance, studentApi } from "@/lib/client/booking-preview";
+import {
+  campusDateTime,
+  errorMessage,
+  type Assessment,
+  type Receipt,
+  type Service,
+  type Urgency,
+} from "@/lib/client/contracts";
+import { SlotSelector } from "./SlotSelector";
+import { SafetyGuidance } from "./SafetyGuidance";
+import { RequestReceipt } from "./RequestReceipt";
+import { UiIcon } from "./UiIcon";
 
-type Service = { id: string; name: string; whoWillKnow: string };
-
-const FIELD_LABELS: Record<string, string> = {
-  serviceId: "Service",
-  structuredDescription: "What you would like help with",
-  preferredTimes: "Preferred times",
-  triageLevelId: "How soon you need to be seen",
-  freeText: "Anything else",
+const fieldLabels: Record<string, string> = {
+  service_id: "service",
+  alias: "alias",
+  intake_note: "your note",
+  manual_urgency: "urgency",
+  requested_slot_start: "appointment time",
+  ai_opt_in: "AI consent",
+  "Idempotency-Key": "submission — refresh before trying again",
 };
 
 export function RequestForm({ preview = false }: { preview?: boolean }) {
-  const router = useRouter();
   const serviceId = useSearchParams().get("service") ?? "";
-
-  const [liveService, setService] = useState<Service | null>(null);
-  const service = preview ? previewServices.find((s) => s.id === serviceId) ?? null : liveService;
-  const [ready, setReady] = useState(preview);
-  // FR-20: every new request starts empty. Nothing is pre-filled from any earlier request.
-  const [description, setDescription] = useState("");
-  const [freeText, setFreeText] = useState("");
-  const [preferred, setPreferred] = useState("");
-  const [triage, setTriage] = useState<number | null>(null);
-  const [errors, setErrors] = useState<string[]>([]);
+  const [services, setServices] = useState<Service[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [slot, setSlot] = useState("");
+  const [slotRefresh, setSlotRefresh] = useState(0);
+  const [alias, setAlias] = useState("");
+  const [note, setNote] = useState("");
+  const [urgency, setUrgency] = useState<Urgency>("ROUTINE");
+  const [consent, setConsent] = useState(false);
+  const [assessment, setAssessment] = useState<Assessment | null>(null);
+  const [assessing, setAssessing] = useState(false);
+  const [aiError, setAiError] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [submittedAcute, setSubmittedAcute] = useState(false);
-  // K-17: one key per form instance — a double-click or retry replays it and creates nothing new.
-  const submissionKey = useRef<string>(crypto.randomUUID());
-  const errorRef = useRef<HTMLDivElement>(null);
-
+  const [error, setError] = useState("");
+  const [fields, setFields] = useState<string[]>([]);
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const submission = useRef<{ key: string; body: unknown } | null>(null);
+  const locked = useRef(false);
+  const [uncertain, setUncertain] = useState(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  const assessmentVersion = useRef(0);
+  const urgentDialog = useRef<HTMLDialogElement>(null);
+  const urgentTrigger = useRef<HTMLElement | null>(null);
+  function showUrgentGuidance(trigger: HTMLElement) {
+    urgentTrigger.current = trigger;
+    urgentDialog.current?.showModal();
+  }
   useEffect(() => {
-    if (errors.length) errorRef.current?.focus();
-  }, [errors]);
-
-  useEffect(() => {
-    if (preview) return;
     let alive = true;
-    (async () => {
-      const me = await api("/me");
-      if (!alive) return;
-      if (me.status === 401) {
-        router.replace(`/sign-in?next=${encodeURIComponent(`/request/new?service=${serviceId}`)}`);
-        return;
+    studentApi(preview)<Service[]>("/services").then((r) => {
+      if (alive) {
+        setLoadError(!r.ok);
+        if (r.ok) setServices(r.data ?? []);
       }
-      const list = await api<{ services: Service[] }>("/services");
-      if (!alive) return;
-      setService(list.data?.services.find((s) => s.id === serviceId) ?? null);
-      setReady(true);
-    })();
+    });
     return () => {
       alive = false;
     };
-  }, [router, serviceId, preview]);
-
-  async function onSubmit(e: React.FormEvent) {
+  }, [preview, reload]);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+  const service = services?.find((s) => s.id === serviceId);
+  async function assess() {
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const version = ++assessmentVersion.current;
+    setAssessing(true);
+    setAiError(false);
+    const r = preview
+      ? { ok: true, data: sampleGuidance(urgency === "URGENT") }
+      : await api<Assessment>("/triage/assess", {
+          method: "POST",
+          body: { intake_note: note.trim() },
+        });
+    if (version !== assessmentVersion.current) return;
+    setAssessing(false);
+    setAssessment(r.ok ? r.data : null);
+    setAiError(!r.ok);
+    if (r.ok && r.data?.urgency_level === "URGENT" && trigger) showUrgentGuidance(trigger);
+  }
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const missing: string[] = [];
-    if (!description.trim()) missing.push("structuredDescription");
-    if (!preferred.trim()) missing.push("preferredTimes");
-    if (triage === null) missing.push("triageLevelId"); // FR-06: no request without a level
-    if (missing.length) {
-      setErrors(missing);
+    if (locked.current || receipt) return;
+    if (!uncertain && (!slot || !note.trim())) {
+      setError(
+        "Choose an available time and tell us what you would like help with.",
+      );
       return;
     }
-
-    if (preview) {
-      if (triage === ACUTE_LEVEL_ID) setSubmittedAcute(true);
-      else router.push(`/preview/requests?service=${encodeURIComponent(serviceId)}`);
-      return;
-    }
-
+    locked.current = true;
     setBusy(true);
-    setErrors([]);
-    const r = await api<{ acute: boolean }>("/requests", {
+    setError("");
+    setFields([]);
+    if (!submission.current)
+      submission.current = {
+        key: crypto.randomUUID(),
+        body: {
+          service_id: serviceId,
+          alias: alias.trim() || null,
+          intake_note: note.trim(),
+          manual_urgency: urgency,
+          requested_slot_start: slot,
+          ai_opt_in: consent,
+        },
+      };
+    const r = await studentApi(preview)<Receipt>("/requests", {
       method: "POST",
-      body: {
-        serviceId,
-        structuredDescription: description,
-        ...(freeText.trim() ? { freeText } : {}),
-        preferredTimes: preferred,
-        triageLevelId: triage,
-        submissionKey: submissionKey.current,
-      },
+      body: submission.current.body,
+      headers: { "Idempotency-Key": submission.current.key },
     });
+    locked.current = false;
     setBusy(false);
-
-    if (r.status === 401) {
-      router.replace("/sign-in");
+    if (r.ok && r.data) {
+      setUncertain(false);
+      setReceipt(r.data);
       return;
     }
-    if (!r.ok) {
-      setErrors(r.fields?.length ? r.fields : ["(form)"]);
-      return;
+    // Unknown outcomes retry the identical body and key before allowing edits.
+    const unknown = r.status === 0 || r.status >= 500 || r.ok;
+    setUncertain(unknown);
+    if (!unknown) submission.current = null;
+    if (r.error === "slot_unavailable") {
+      setSlot("");
+      setSlotRefresh((n) => n + 1);
     }
-    if (r.data?.acute) {
-      setSubmittedAcute(true); // FR-08: do not move on to "book a slot"
-      return;
-    }
-    router.replace("/requests?sent=1");
-  }
-
-  if (!ready) return <p>Loading…</p>;
-
-  if (!service) {
-    return (
-      <p className="rounded-md border border-base-300 bg-base-100 p-4">
-        Please choose a service first.{" "}
-        <Link className="underline" href="/">
-          Back to all services
-        </Link>
-      </p>
+    setFields(r.fields ?? []);
+    setError(
+      unknown
+        ? "We could not confirm whether your request was received. Retry the same request below to recover its access key safely."
+        : errorMessage(r.error),
     );
   }
-
-  if (submittedAcute) {
+  if (loadError)
     return (
-      <section aria-labelledby="acute-heading" className="space-y-4 alert alert-error alert-soft block p-6">
-        <h2 id="acute-heading" className="text-2xl font-semibold" tabIndex={-1}>
-          Please contact someone now
-        </h2>
-        <p>{CANNOT_HELP_NOW}</p>
-        <ul className="space-y-2">
-          {EMERGENCY_CONTACTS.map((c) => (
-            <li key={c.tel}>
-              {c.name}:{" "}
-              <a className="text-xl font-bold underline underline-offset-2" href={`tel:${c.tel}`}>
-                {c.phone}
-              </a>{" "}
-              <span className="text-sm">({c.detail})</span>
-            </li>
-          ))}
-        </ul>
-        <p>
-          {preview ? "This is a sample urgent state. No request was sent and no staff have been notified. In the connected app, urgent requests are flagged for staff follow-up." : "Your request has been recorded and flagged so that a member of staff follows it up directly."} It is{" "}
-          <strong>not</strong> being handled by booking a slot in this app, and a reply here may not be quick — please
-          do not wait for it.
-        </p>
-        <Link className="inline-block underline" href={preview ? "/preview/requests" : "/requests"}>
-          {preview ? "View sample dashboard" : "See my requests"}
-        </Link>
-      </section>
+      <div className="card gap-3 p-6" role="alert">
+        <p>We could not load the service.</p>
+        <button
+          className="btn self-start"
+          onClick={() => {
+            setLoadError(false);
+            setReload((n) => n + 1);
+          }}
+        >
+          Retry
+        </button>
+      </div>
     );
-  }
-
-  const acuteSelected = triage === ACUTE_LEVEL_ID;
-
-  return (
-    <form onSubmit={onSubmit} noValidate className="request-form mx-auto space-y-6">
-      <section aria-labelledby="privacy-heading" className="privacy-panel rounded-xl border border-base-300 bg-base-200 p-5">
-        <h2 id="privacy-heading" className="text-lg font-semibold">
-          Who can see this request
-        </h2>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
-          <li>
-            <strong>Can read what you write:</strong> only the practitioners of <strong>{service.name}</strong>. Every
-            time one of them opens it, that view is logged.
-          </li>
-          <li>
-            <strong>Can see that a request exists, its urgency and status — but never what you wrote:</strong> the
-            intake coordinator.
-          </li>
-          <li>
-            <strong>Cannot see anything:</strong> lecturers and faculty, parents or guardians, other students, other
-            services, and analytics — this app sends nothing to analytics.
-          </li>
-          <li>Reminders only ever say “You have an appointment” with a date and time — never which service or why.</li>
-        </ul>
-      </section>
-
+  if (!services)
+    return (
       <div
-        ref={errorRef}
-        tabIndex={-1}
-        role={errors.length ? "alert" : undefined}
-        className={errors.length ? "alert alert-error alert-soft block p-4" : "hidden"}
-      >
-        <p className="font-semibold">Please check the form:</p>
-        <ul className="list-disc pl-5">
-          {errors.map((f) => (
-            <li key={f}>{FIELD_LABELS[f] ? `${FIELD_LABELS[f]} is needed or is too long.` : "We could not send your request. Please try again."}</li>
-          ))}
-        </ul>
+        className="skeleton h-40 w-full"
+        role="status"
+        aria-label="Loading service"
+      />
+    );
+  if (!service)
+    return (
+      <div className="card gap-3 p-6">
+        <p>This service is not available. Please choose an active service.</p>
+        <Link href="/" className="btn self-start">
+          Browse services
+        </Link>
       </div>
-
-      <div className="request-fields space-y-6 card card-border bg-base-100 p-5 sm:p-8">
-        <p className="text-sm text-base-content/70">
-          Service: <strong>{service.name}</strong>
-        </p>
-
-        <div>
-          <label htmlFor="description" className="block font-medium">
-            What would you like help with? <span className="font-normal text-base-content/70">(a sentence or two)</span>
-          </label>
-          <textarea
-            id="description"
-            required
-            rows={3}
-            maxLength={500}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            aria-invalid={errors.includes("structuredDescription")}
-            aria-describedby={errors.includes("structuredDescription") ? "description-error" : undefined}
-            className="textarea mt-1 w-full"
-          />
-          {errors.includes("structuredDescription") && <p id="description-error" className="field-error mt-2 text-sm">Enter what you would like help with, up to 500 characters.</p>}
-        </div>
-
-        <div>
-          <label htmlFor="free-text" className="block font-medium">
-            Anything else? <span className="font-normal text-base-content/70">(optional)</span>
-          </label>
-          <p id="free-text-hint" className="text-sm text-base-content/70">
-            Staff-readable: the practitioners of {service.name} will read this too.
+    );
+  if (receipt) return <RequestReceipt receipt={receipt} />;
+  return (
+    <div className="intake-layout">
+      <form
+        onSubmit={submit}
+        className="intake-form card card-border min-w-0 gap-6"
+      >
+        <h2 className="text-2xl font-semibold">{service.name}</h2>
+        <p className="text-sm text-base-content/70">Save the access key after submitting to check or cancel your request. Staff cannot contact you anonymously.</p>
+        {error && (
+          <p ref={errorRef} tabIndex={-1} role="alert" className="alert block">
+            {error}
+            {fields.length > 0 && (
+              <span className="mt-2 block">
+                Check:{" "}
+                {fields
+                  .map((field) => fieldLabels[field] ?? "form details")
+                  .join(", ")}
+              </span>
+            )}
           </p>
-          <textarea
-            id="free-text"
-            rows={3}
-            maxLength={2000}
-            value={freeText}
-            onChange={(e) => setFreeText(e.target.value)}
-            aria-invalid={errors.includes("freeText")}
-            aria-describedby={errors.includes("freeText") ? "free-text-hint free-text-error" : "free-text-hint"}
-            className="textarea mt-1 w-full"
-          />
-          {errors.includes("freeText") && <p id="free-text-error" className="field-error mt-2 text-sm">Keep the extra details within 2,000 characters.</p>}
-        </div>
-
-        <div>
-          <label htmlFor="preferred" className="block font-medium">
-            When suits you?
-          </label>
-          <input
-            id="preferred"
-            required
-            maxLength={300}
-            value={preferred}
-            onChange={(e) => setPreferred(e.target.value)}
-            aria-invalid={errors.includes("preferredTimes")}
-            aria-describedby={errors.includes("preferredTimes") ? "preferred-error" : undefined}
-            placeholder="e.g. weekday afternoons"
-            className="input mt-1 w-full"
-          />
-          {errors.includes("preferredTimes") && <p id="preferred-error" className="field-error mt-2 text-sm">Enter your preferred times, up to 300 characters.</p>}
-        </div>
-
-        <fieldset className="fieldset text-base" aria-invalid={errors.includes("triageLevelId")} aria-describedby={errors.includes("triageLevelId") ? "triage-error" : undefined}>
-          <legend className="fieldset-legend whitespace-normal">How soon do you need to be seen?</legend>
-          <p className="text-sm text-base-content/70">Your answer decides the order staff see requests in. Nobody changes it for you.</p>
-          <div className="mt-2 space-y-2">
-            {TRIAGE_LEVELS.map((t) => (
-              <label key={t.id} data-urgent={t.id === ACUTE_LEVEL_ID} className="flex cursor-pointer items-start gap-3 rounded-field border border-base-300 p-4 has-[:checked]:border-neutral has-[:checked]:bg-base-200">
-                <input
-                  type="radio"
-                  name="triage"
-                  value={t.id}
-                  checked={triage === t.id}
-                  onChange={() => setTriage(t.id)}
-                  className="radio mt-0.5 shrink-0"
-                />
-                <span>
-                  <span className="font-medium">{t.label}</span>
-                  <span className="block text-sm text-base-content/70">{t.description}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-          {errors.includes("triageLevelId") && <p id="triage-error" className="field-error mt-2 text-sm">Choose how soon you need to be seen.</p>}
-        </fieldset>
-
-        {acuteSelected && (
-          <div role="alert" className="alert alert-error alert-soft block p-4">
-            <p className="font-semibold">Please do not wait for this app.</p>
-            <p className="mt-1">{CANNOT_HELP_NOW}</p>
-            <ul className="mt-2 space-y-1">
-              {EMERGENCY_CONTACTS.slice(0, 3).map((c) => (
-                <li key={c.tel}>
-                  {c.name}:{" "}
-                  <a className="text-lg font-bold underline underline-offset-2" href={`tel:${c.tel}`}>
-                    {c.phone}
-                  </a>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 text-sm">{preview ? "Sample only: no request is sent and no staff are notified. In the connected app, an urgent request is flagged for direct follow-up." : "You can still send this request so staff follow up with you directly."}</p>
-          </div>
         )}
-      </div>
+        <fieldset disabled={busy || uncertain} className="min-w-0 space-y-6">
+          <SlotSelector
+            key={serviceId}
+            serviceId={serviceId}
+            value={slot}
+            onChange={setSlot}
+            preview={preview}
+            refresh={slotRefresh}
+          />
+          <label className="block">
+            <span className="mb-2 block font-medium">
+              Alias or nickname{" "}
+              <span className="font-normal text-base-content/70">
+                (optional)
+              </span>
+            </span>
+            <input
+              className="input w-full"
+              value={alias}
+              onChange={(e) => setAlias(e.target.value)}
+              maxLength={40}
+              autoComplete="off"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block font-medium">
+              What would you like help with? <span className="font-normal text-base-content/70">(required)</span>
+            </span>
+            <textarea
+              className="textarea min-h-32 w-full"
+              required
+              maxLength={2000}
+              value={note}
+              aria-invalid={fields.includes("intake_note")}
+              onChange={(e) => {
+                setNote(e.target.value);
+                setAssessment(null);
+                setAiError(false);
+                assessmentVersion.current++;
+                setAssessing(false);
+              }}
+            />
+            <span className="mt-2 block text-sm text-base-content/70">
+              {note.length}/2000 characters. Avoid names, emails, or student ID
+              numbers.
+            </span>
+          </label>
+          <fieldset>
+            <legend className="mb-3 font-medium">
+              How urgent does this feel?
+            </legend>
+            <div className="flex flex-wrap gap-5">
+              {(["ROUTINE", "URGENT"] as const).map((value) => (
+                <label
+                  className="flex min-h-11 cursor-pointer items-center gap-3"
+                  key={value}
+                >
+                  <input
+                    type="radio"
+                    name="urgency"
+                    className="radio"
+                    checked={urgency === value}
+                    onChange={(event) => {
+                      setUrgency(value);
+                      if (value === "URGENT") showUrgentGuidance(event.currentTarget);
+                    }}
+                    onClick={(event) => {
+                      if (value === "URGENT" && urgency === "URGENT") showUrgentGuidance(event.currentTarget);
+                    }}
+                  />
+                  {value === "URGENT" ? "Urgent" : "Routine"}
+                </label>
+              ))}
+            </div>
+            <p className="mt-2 text-sm text-base-content/70">
+              Your Urgent choice is always respected. An appointment is not
+              immediate crisis support.
+            </p>
+          </fieldset>
 
-      <div className="request-submit">
-      <button
-        type="submit"
-        disabled={busy}
-        aria-busy={busy}
-        className="btn btn-primary w-full"
-      >
-        {busy ? <span aria-hidden="true" className="loading loading-spinner loading-sm" /> : <UiIcon name="shield" className="size-5" />}
-        {busy ? "Sending your request…" : "Send private request"}
-        {!busy && <UiIcon name="arrow" className="size-4" />}
-      </button>
-      <p className="mt-3 text-center text-xs text-base-content/70">{acuteSelected ? "Urgent requests are flagged for direct staff follow-up. Please use the emergency contacts if you need help now." : "A practitioner reviews your request before you can book an appointment."}</p>
-      </div>
-      {preview && <p className="text-sm text-base-content/70">Sample only. Fields stay on this screen and are discarded when you leave. Continue to see a fictional request and booking example.</p>}
-    </form>
+          <details className="optional-assessment">
+            <summary>Optional AI urgency check{consent ? " · Enabled" : ""}</summary>
+            <div className="space-y-3 pt-4">
+            <p className="text-sm text-base-content/70">
+              With your permission, your note is sent to an external AI provider
+              to suggest Routine or Urgent. You can submit without AI. This is
+              not a diagnosis.
+            </p>
+            <label className="flex min-h-11 items-start gap-3">
+              <input
+                className="checkbox mt-1"
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => {
+                  setConsent(e.target.checked);
+                  setAssessment(null);
+                  assessmentVersion.current++;
+                  setAssessing(false);
+                }}
+              />
+              <span>I agree to send my note for AI assessment.</span>
+            </label>
+            <button
+              className="btn"
+              type="button"
+              disabled={!consent || !note.trim() || assessing}
+              onClick={() => void assess()}
+            >
+              {assessing ? "Checking urgency…" : "Check with AI"}
+            </button>
+            {aiError && (
+              <p role="status" className="text-sm">
+                AI is unavailable. Your manual choice and the automatic safety
+                checks still work; you can submit now.
+              </p>
+            )}
+            {assessment && (
+              <>
+                <p className="text-sm">
+                  {assessment.triage_mode === "DETERMINISTIC_FALLBACK"
+                    ? "AI was not used. The safety fallback was applied."
+                    : "AI suggestion only. Your final urgency is checked on submission."}
+                </p>
+                {assessment.urgency_level !== "URGENT" && <SafetyGuidance result={assessment} />}
+              </>
+            )}
+            </div>
+          </details>
+        </fieldset>
+        {slot && (
+          <p className="rounded-field bg-base-200 p-4 text-sm">
+            Requesting <strong>{campusDateTime(slot)}</strong> (Bangkok), for{" "}
+            {service.duration_minutes} minutes. A practitioner will review this
+            time.
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={busy || (!uncertain && (!slot || !note.trim()))}
+          aria-busy={busy}
+          className="btn btn-primary w-full"
+        >
+          {busy
+            ? "Sending private request…"
+            : uncertain
+              ? "Retry the same request"
+              : "Send private request"}
+        </button>
+        {!busy && !uncertain && (!slot || !note.trim()) && <p role="status" className="form-next-action">{!slot ? "Choose an available appointment time to continue." : "Add a short note above to send your request."}</p>}
+      </form>
+          <dialog ref={urgentDialog} className="modal urgent-guidance-dialog" aria-labelledby="urgent-guidance-title" onClick={(event) => { if (event.target === event.currentTarget) urgentDialog.current?.close(); }} onClose={() => urgentTrigger.current?.focus({ preventScroll: true })}>
+            <div className="modal-box urgent-guidance-panel">
+              <div className="urgent-guidance-heading"><h2 id="urgent-guidance-title">Urgent support</h2><button type="button" className="btn btn-ghost btn-square" aria-label="Close urgent support" onClick={() => urgentDialog.current?.close()}><UiIcon name="close" /></button></div>
+              <SafetyGuidance result={assessment?.urgency_level === "URGENT" ? assessment : sampleGuidance(true)} />
+            </div>
+          </dialog>
+    </div>
   );
 }

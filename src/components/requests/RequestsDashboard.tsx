@@ -1,127 +1,259 @@
 "use client";
-
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "@/lib/client/api";
-import { createRequestPreviewApi } from "@/lib/client/request-preview";
-import { UiIcon } from "@/components/UiIcon";
-import { ACUTE_LEVEL_ID } from "@/lib/triage";
-import { BookingTimePicker } from "./BookingTimePicker";
-import { StudentRequestCard } from "./StudentRequestCard";
-import type { BookingSlot, StudentRequest } from "./types";
-import { useRouter } from "next/navigation";
+import { studentApi } from "@/lib/client/booking-preview";
+import {
+  campusTime,
+  errorMessage,
+  getNavigationKey,
+  setNavigationKey,
+  STATUS_LABELS,
+  type AppointmentRequest,
+  type Service,
+} from "@/lib/client/contracts";
+import { EmergencyBanner } from "../EmergencyBanner";
+import { UiIcon } from "../UiIcon";
 
-export function RequestsDashboard({ preview = false, previewServiceId, justSent = false }: { preview?: boolean; previewServiceId?: string; justSent?: boolean }) {
-  const router = useRouter();
-  const requestApi = useMemo(() => preview ? createRequestPreviewApi(previewServiceId) : api, [preview, previewServiceId]);
-  const [requests, setRequests] = useState<StudentRequest[] | null>(null);
-  const displayRequests = useMemo(() => {
-    const priority = (request: StudentRequest) => {
-      if (request.triageLevelId === ACUTE_LEVEL_ID && ["submitted", "in_review"].includes(request.status)) return 0;
-      if (request.bookable) return 1;
-      if (request.appointment) return 2;
-      if (request.status === "submitted" || request.status === "in_review") return 3;
-      return 4;
-    };
-    return requests ? [...requests].sort((a, b) => priority(a) - priority(b)) : null;
-  }, [requests]);
-  const [refresh, setRefresh] = useState(0);
-  const [loadError, setLoadError] = useState(false);
-  const [openFor, setOpenFor] = useState<string | null>(null);
-  const [slots, setSlots] = useState<BookingSlot[]>([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [slotsError, setSlotsError] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
-  const [sentMessageVisible, setSentMessageVisible] = useState(justSent);
-  const noticeRef = useRef<HTMLParagraphElement>(null);
-
+export function RequestsDashboard({
+  preview = false,
+}: {
+  preview?: boolean;
+  previewServiceId?: string;
+  justSent?: boolean;
+}) {
+  const [key, setKey] = useState(getNavigationKey);
+  const [activeKey, setActiveKey] = useState("");
+  const [request, setRequest] = useState<AppointmentRequest | null>(null);
+  const [services, setServices] = useState<Service[]>([]);
   useEffect(() => {
     let alive = true;
-    requestApi<{ requests: StudentRequest[] }>("/requests/me").then(result => {
-      if (!alive) return;
-      if (result.status === 401 || result.status === 404) { router.replace("/sign-in?next=/requests"); return; }
-      setLoadError(!result.ok);
-      if (result.ok) setRequests(result.data?.requests ?? []);
+    studentApi(preview)<Service[]>("/services").then(result => {
+      if (alive && result.ok) setServices(result.data ?? []);
     });
     return () => { alive = false; };
-  }, [requestApi, router, refresh]);
-
-  useEffect(() => { if (notice?.error) noticeRef.current?.focus(); }, [notice]);
-
-  const dismissNotice = useCallback(() => setNotice(null), []);
-
-  async function showSlots(id: string) {
-    setSentMessageVisible(false);
-    setOpenFor(id);
-    setSlots([]);
-    setSlotsError(false);
-    setLoadingSlots(true);
-    const result = await requestApi<{ slots: BookingSlot[] }>(`/requests/${id}/slots`);
-    setLoadingSlots(false);
-    setSlotsError(!result.ok);
-    if (result.ok) setSlots(result.data?.slots ?? []);
-  }
-
-  async function book(requestId: string, slotId: string) {
+  }, [preview]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const resultRef = useRef<HTMLElement>(null);
+  const keyInput = useRef<HTMLInputElement>(null);
+  const version = useRef(0);
+  async function lookup() {
+    const attempt = ++version.current;
     setBusy(true);
-    const result = await requestApi<{ slots?: BookingSlot[] }>("/appointments", { method: "POST", body: { requestId, slotId } });
+    setMessage("");
+    setRequest(null);
+    const normalized = key.trim().toUpperCase();
+    const r = await studentApi(preview)<AppointmentRequest>("/requests/me", {
+      headers: { "X-Access-Key": normalized },
+    });
+    if (attempt !== version.current) return;
     setBusy(false);
-    if (result.ok) {
-      setOpenFor(null);
-      setNotice({ text: "Your appointment is booked.", error: false });
-      setRefresh(value => value + 1);
-    } else if (result.error === "slot_taken") {
-      setSlots(result.data?.slots ?? []);
-      setNotice({ text: "That time was just booked. Choose another available time below.", error: true });
-    } else if (result.error === "request_not_bookable") {
-      setOpenFor(null);
-      setNotice({ text: "This request cannot be booked right now. Its latest status is shown below.", error: true });
-      setRefresh(value => value + 1);
-    } else setNotice({ text: "We could not book that time. Your appointment has not been confirmed. Please try again.", error: true });
+    setError(!r.ok);
+    if (r.ok && r.data) {
+      setRequest(r.data);
+      setActiveKey(normalized);
+      requestAnimationFrame(() => resultRef.current?.focus());
+    } else
+      setMessage(
+        r.status === 404
+          ? "We couldn’t find a request with that key. Check your saved key and try again."
+          : errorMessage(r.error),
+      );
   }
-
-  async function cancel(id: string) {
+  async function cancel() {
+    if (!request || busy) return;
     setBusy(true);
-    const result = await requestApi(`/appointments/${id}/cancel`, { method: "POST" });
+    setMessage("");
+    const r = await studentApi(preview)(
+      `/requests/${encodeURIComponent(request.id)}/cancel`,
+      { method: "POST", body: { access_key: activeKey } },
+    );
     setBusy(false);
-    setNotice({ text: result.ok ? "Your appointment is cancelled. No reason needed, no penalty." : "We could not cancel your appointment. It remains booked. Please try again.", error: !result.ok });
-    if (result.ok) setRefresh(value => value + 1);
-    return result.ok;
+    setError(!r.ok);
+    if (r.ok) {
+      setRequest({ ...request, status: "CANCELLED" });
+      dialog.current?.close();
+      requestAnimationFrame(() => resultRef.current?.focus());
+      setMessage(
+        "Your request is cancelled. The appointment time and privacy buffer have been released.",
+      );
+    } else setMessage(errorMessage(r.error));
   }
-
-  return <div className="requests-page mx-auto max-w-4xl space-y-6 sm:space-y-8">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="display-heading text-4xl sm:text-5xl">My requests</h1><p className="mt-3 max-w-xl text-base-content/70">A quiet place to check your progress and manage your appointments.</p></div><Link href="/" className="btn">Explore services <UiIcon name="arrow" className="size-4" /></Link></div>
-    <div className="requests-columns"><div className="requests-main space-y-5">
-    {preview && <p className="request-note rounded-field p-4 text-sm text-base-content/70">UI preview uses fictional records. These interactions do not book or cancel a real appointment. Refresh to reset.</p>}
-    {(notice?.error || sentMessageVisible) && <p ref={noticeRef} tabIndex={-1} role={notice?.error ? "alert" : "status"} className={notice?.error ? "alert alert-error block p-4" : "request-glass alert block p-4 font-medium"}>{notice?.error ? notice.text : "Your request was sent privately. You can book a time once a practitioner has opened it."}</p>}
-    {notice && !notice.error && <BookingToast key={notice.text} text={notice.text} onDismiss={dismissNotice} />}
-    {loadError && <div role="alert" className="request-glass space-y-3 p-5"><p>We could not load your requests. Please try again.</p><button type="button" className="btn" onClick={() => setRefresh(value => value + 1)}>Retry loading requests</button></div>}
-    {!requests && !loadError && <div role="status" aria-label="Loading requests" aria-busy="true" className="space-y-4"><div className="skeleton h-48 w-full" /><div className="skeleton h-24 w-full" /></div>}
-    {requests?.length === 0 && <section className="request-glass card card-border p-6"><h2 className="text-xl font-semibold">No requests yet</h2><p className="mt-2 text-sm text-base-content/70">Explore campus services and send a private request when you’re ready.</p><Link href="/" className="btn btn-primary mt-4 self-start">Find your support</Link></section>}
-    <div className="space-y-5">{displayRequests?.map(request => <StudentRequestCard key={request.id} request={request} busy={busy} onCancel={cancel}>
-      {request.bookable && <div className="mt-5 border-t border-base-300 pt-5"><button type="button" className={`btn w-full sm:w-auto ${openFor === request.id ? "btn-ghost" : "btn-primary"}`} disabled={busy || loadingSlots} aria-expanded={openFor === request.id} aria-controls={`slots-${request.id}`} onClick={() => openFor === request.id ? setOpenFor(null) : void showSlots(request.id)}>{openFor === request.id ? "Hide available times" : "Choose a time"}</button>
-        {openFor === request.id && <div id={`slots-${request.id}`} className="booking-stage mt-5 min-w-0">{loadingSlots ? <div className="skeleton h-40 w-full" role="status" aria-label="Loading appointment times" /> : slotsError ? <div role="alert" className="space-y-3"><p>We could not load available times.</p><button type="button" className="btn" onClick={() => void showSlots(request.id)}>Retry loading times</button></div> : <BookingTimePicker slots={slots} busy={busy} onConfirm={id => void book(request.id, id)} />}</div>}
-      </div>}
-    </StudentRequestCard>)}</div>
-    </div><aside className="requests-context space-y-5">
-      <section className="booking-scene request-glass card card-border" aria-label="Campus wellbeing appointments"><div><h2 className="text-2xl font-semibold tracking-tight">One step at a time.</h2><p>Follow your requests and choose a time that works for you after a practitioner has reviewed your request.</p>{requests && requests.length > 0 && <div className="dashboard-summary"><span><strong>{requests.length}</strong> {requests.length === 1 ? "request" : "requests"}</span><span><strong>{requests.filter(request => request.bookable).length}</strong> ready to book</span><span><strong>{requests.filter(request => request.appointment).length}</strong> booked</span></div>}</div></section>
-      <section className="request-glass card card-border p-5 sm:p-8"><h2 className="font-semibold">Your details stay private</h2><p className="mt-2 max-w-prose text-sm text-base-content/70">Request content is not repeated on this dashboard. Only the practitioners of your chosen service can read it.</p></section>
-    </aside></div>
-  </div>;
-}
-
-function BookingToast({ text, onDismiss }: { text: string; onDismiss: () => void }) {
-  const [leaving, setLeaving] = useState(false);
-  const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    const fadeTimer = setTimeout(() => setLeaving(true), 4840);
-    const removeTimer = setTimeout(onDismiss, 5000);
-    return () => { clearTimeout(fadeTimer); clearTimeout(removeTimer); if (dismissTimer.current) clearTimeout(dismissTimer.current); };
-  }, [onDismiss]);
-  function dismiss() {
-    setLeaving(true);
-    dismissTimer.current = setTimeout(onDismiss, 160);
+  function clear() {
+    version.current++;
+    setBusy(false);
+    setKey("");
+    setActiveKey("");
+    setRequest(null);
+    setNavigationKey("");
+    setMessage("");
+    keyInput.current?.focus();
   }
-  return <div data-leaving={leaving} className="booking-toast toast toast-end toast-bottom bottom-6 right-4 z-50 max-w-[calc(100vw-2rem)] sm:right-6"><div className="request-glass alert flex items-center gap-3 p-4" role="status"><svg aria-hidden="true" className="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m5 12 4 4L19 6" /></svg><span className="text-sm font-medium">{text}</span><button type="button" className="btn btn-ghost btn-square shrink-0 border-0" aria-label="Dismiss notification" disabled={leaving} onClick={dismiss}><UiIcon name="close" /></button></div></div>;
+  return (
+    <div className="requests-page mx-auto max-w-4xl space-y-6">
+      <div>
+        <h1 className="display-heading text-4xl sm:text-5xl">
+          Track your private request
+        </h1>
+        <p className="mt-3 text-base-content/70">
+          Your access key is all you need. No student account or sign-in.
+        </p>
+      </div>
+      <EmergencyBanner />
+      <form
+        className="card card-border gap-4 p-5 sm:p-8"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void lookup();
+        }}
+      >
+        <label className="block">
+          <span className="mb-2 block font-medium">Private Access Key</span>
+          <input
+            ref={keyInput}
+            className="input w-full font-mono uppercase"
+            autoComplete="off"
+            spellCheck={false}
+            autoCapitalize="characters"
+            placeholder="WB-XXXX-XXXX-XXXX"
+            required
+            maxLength={64}
+            aria-describedby="access-key-help"
+            value={key}
+            disabled={busy}
+            onChange={(e) => {
+              setKey(e.target.value);
+              setRequest(null);
+              setMessage("");
+            }}
+          />
+        </label>
+        <p id="access-key-help" className="text-sm text-base-content/70">
+          Enter the key you saved when sending your request. It is not saved automatically, and a lost key cannot be recovered.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <button
+            className="btn btn-primary"
+            disabled={busy || !key.trim()}
+            aria-busy={busy}
+          >
+            {busy ? "Checking status…" : request ? "Refresh status" : "Check status"}
+          </button>
+          {(key || request) && <button className="btn" type="button" onClick={clear}>Clear key and details</button>}
+        </div>
+      </form>
+      {message && (
+        <p role={error ? "alert" : "status"} className="card p-5">
+          {message}
+        </p>
+      )}
+      {request && (
+        <section
+          ref={resultRef}
+          tabIndex={-1}
+          className="card tracked-request-card"
+          aria-labelledby="tracked-service-name"
+        >
+          <div className="tracked-request-header">
+            <h2 id="tracked-service-name">{services.find(service => service.id === request.service_id)?.name ?? "Counselling appointment"}</h2>
+            <span className="tracked-request-status" data-status={request.status}><UiIcon name="status" className="size-4" />{STATUS_LABELS[request.status]}</span>
+          </div>
+          <div className="tracked-request-schedule">
+            <span className="tracked-calendar-icon"><UiIcon name="calendar" className="size-6" /></span>
+            <dl><div><dt>{request.status === "PENDING" ? "Requested date" : "Appointment date"}</dt><dd>{new Date(request.requested_slot_start).toLocaleDateString("en-GB", { timeZone: "Asia/Bangkok", weekday: "long", day: "numeric", month: "long", year: "numeric" })}</dd></div><div><dt>Time</dt><dd>{campusTime(request.requested_slot_start)}–{campusTime(request.requested_slot_end)}<span className="tracked-timezone">Bangkok · UTC+7</span></dd></div></dl>
+          </div>
+          <div className="tracked-status-explanation">
+          {request.status === "PENDING" && (
+            <p>
+              Your chosen time is reserved while a practitioner reviews your
+              request. It is not confirmed yet.
+            </p>
+          )}
+          {request.status === "CONFIRMED" && (
+            <p>
+              Your appointment is confirmed. Check this page again before your
+              visit: a practitioner may change the time, and we cannot contact
+              you anonymously.
+            </p>
+          )}
+          {request.status === "REJECTED" && (
+            <p>
+              This request was declined. You can browse services to send a new
+              request.
+            </p>
+          )}
+          {request.status === "CANCELLED" && (
+            <p>
+              This request is cancelled. To request another appointment, start
+              again from services.
+            </p>
+          )}
+          </div>
+          {request.urgency_level === "URGENT" && (
+            <div className="rounded-field border border-error p-4">
+              <p className="font-semibold">Urgent concern</p>
+              <p className="mt-2">
+                Staff cannot contact an anonymous student. Use the emergency
+                contacts above if you need help now; do not wait for an
+                appointment.
+              </p>
+            </div>
+          )}
+          <div className="tracked-request-footer"><p>Your note stays private. Keep your access key safe.</p>
+          {["PENDING", "CONFIRMED"].includes(request.status) && (
+            <button
+              type="button"
+              className="tracked-cancel-link"
+              disabled={busy}
+              onClick={() => dialog.current?.showModal()}
+            >
+              Cancel request
+            </button>
+          )}
+          {["REJECTED", "CANCELLED"].includes(request.status) && <Link href="/" className="tracking-status-link">Choose another appointment <UiIcon name="arrow" className="size-4" /></Link>}
+          </div>
+        </section>
+      )}
+      <dialog
+        ref={dialog}
+        className="modal"
+        aria-labelledby="cancel-title"
+        onCancel={(e) => {
+          if (busy) e.preventDefault();
+        }}
+      >
+        <div className="modal-box">
+          <h2 id="cancel-title" className="text-xl font-semibold">
+            Cancel this request?
+          </h2>
+          <p className="mt-3">
+            Your reserved time will be released. This cannot be undone.
+          </p>
+          {message && error && (
+            <p role="alert" className="mt-3">
+              {message}
+            </p>
+          )}
+          <div className="modal-action">
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={() => dialog.current?.close()}
+            >
+              Keep request
+            </button>
+            <button
+              className="btn btn-error"
+              disabled={busy}
+              onClick={() => void cancel()}
+            >
+              {busy ? "Cancelling…" : "Confirm cancellation"}
+            </button>
+          </div>
+        </div>
+      </dialog>
+    </div>
+  );
 }
