@@ -1,18 +1,41 @@
 // Browser-side fetch helper. Holds no credential: the session lives in HttpOnly cookies
 // and every permission check happens server-side (FR-21).
 
-export type ApiResult<T> = { ok: boolean; status: number; data: T | null; error: string | null; fields?: string[] };
+export type ApiResult<T> = {
+  ok: boolean;
+  status: number;
+  data: T | null;
+  error: string | null;
+  fields?: string[];
+};
 
-export async function api<T = unknown>(path: string, init?: { method?: string; body?: unknown }): Promise<ApiResult<T>> {
+export type ApiInit = {
+  method?: string;
+  body?: unknown;
+  headers?: Record<string, string>;
+  signal?: AbortSignal;
+};
+
+export async function api<T = unknown>(
+  path: string,
+  init?: ApiInit,
+): Promise<ApiResult<T>> {
   try {
     const res = await fetch(`/api/v1${path}`, {
       method: init?.method ?? "GET",
-      headers: init?.body !== undefined ? { "content-type": "application/json" } : undefined,
+      headers: {
+        ...(init?.body !== undefined
+          ? { "content-type": "application/json" }
+          : {}),
+        ...init?.headers,
+      },
+      signal: init?.signal,
       body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
       cache: "no-store",
       credentials: "same-origin",
     });
-    const json = (await res.json().catch(() => null)) as (T & { error?: string; fields?: string[] }) | null;
+    const json = (await res.json().catch(() => null)) as
+      (T & { error?: string; fields?: string[] }) | null;
     return {
       ok: res.ok,
       status: res.status,

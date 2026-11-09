@@ -1,67 +1,52 @@
 # Frontend handoff
 
-The frontend is ready for backend collaboration. It uses the existing same-origin `/api/v1` contract and existing Next.js route handlers. The UI changes do not replace the backend, change the database schema, or implement a second authentication system.
+Additional feature: optional service matching is implemented in the frontend. Its server endpoint is **not implemented yet**. See [the backend fix specification](refine-backend.md) before connected testing. The fictional preview uses a labelled local word matcher.
 
-## Start with the UI
+The frontend implements the anonymous counselling journey in `wellbeing_prd.md` and `docs/PRD.md`. It uses the existing same-origin `/api/v1` backend. No backend routes, database migrations, or authentication services were changed.
 
-Use Node.js 22.12 or newer and pnpm 10. Install dependencies with `pnpm install`.
+## Run and connect
 
-For a database-free preview, create `.env.local` containing `UI_PREVIEW=true`, then run `pnpm dev` and open the URL printed by Next.js. The homepage, request form, urgent guidance, and `/preview/requests` booking/cancellation flow use fictional in-memory data. Refreshing resets this preview. The preview flag is ignored in production builds.
+Use Node 22.12+ and pnpm 10. Run `pnpm install` and `pnpm dev`.
 
-For connected testing, use `UI_PREVIEW=false`, configure the server settings from [`.env.example`](../.env.example), and follow the local Supabase instructions and demo account list in [`README.md`](../README.md). The configured application origin and mock-hub URL must match the port you use. Do not copy another developer's `.env.local` into Git.
+For a database-free student preview, set `UI_PREVIEW=true` in `.env.local`. The catalogue, slot picker, intake, key confirmation, tracking, and cancellation use fictional in-memory data. Submit a request to obtain a working preview key; refreshing clears all preview records. Preview AI returns an explicitly labelled manual fallback and does not send notes anywhere. Staff screens still use the real API; preview mode does not bypass permissions. The flag is ignored in production.
 
-The seed command resets the demo dataset and deletes existing fixture auth users before recreating services, accounts, and future appointment slots. Run it only against an intended demo database. It does not create the sample request history used during the local design review; create requests through the student flow after seeding.
+For connected testing, set `UI_PREVIEW=false` and configure the server variables in `.env.example` following `README.md`. The origin and mock-hub URL must match your development port. Students never sign in. Staff use the existing practitioner/admin accounts. Do not seed or reset a shared database just to review the UI.
 
-## Screens
+## Screens and API connections
 
-| Route | Access and purpose |
+| Route | Purpose and API |
 | --- | --- |
-| `/` | Public service catalogue and optional service matcher |
-| `/sign-in` | Fixture account sign-in |
-| `/request/new?service=<service UUID>` | Student request form |
-| `/requests` | Student requests, booking, and cancellation |
-| `/practitioner` | Service-specific queue, audited content views, and availability |
-| `/coordinator` | Cross-service request metadata; no private request content |
-| `/emergency` | Static emergency contacts with no database dependency |
-| `/preview/requests` | Development-only booking preview |
+| `/` | Active services: `GET /services`, plain array |
+| `/request/new?service=<service ID>` | Campus date/slot picker: `GET /slots?service_id=...&date=YYYY-MM-DD`; anonymous intake: `POST /requests`; optional AI: `POST /triage/assess` |
+| `/requests` | Key entry/status: `GET /requests/me` with `X-Access-Key`; cancellation: `POST /requests/{id}/cancel` with `{ access_key }` |
+| `/sign-in` | Staff only: existing session and current-role endpoints |
+| `/practitioner` | `GET /practitioner/queue`, `GET /practitioner/schedule`, `PATCH /requests/{id}/status` |
+| `/admin` | Service editing and weekly opening windows using existing admin endpoints |
+| `/emergency` | Static emergency guidance; no database dependency |
+| `/coordinator` | Legacy URL redirects to `/admin`; coordinator role is retired |
+| `/preview/requests` | Development-only tracking screen; create a preview request first |
 
-## Integration points
+Paths in the table are relative to `/api/v1`. Exact bodies and responses are in `openapi.yaml`; backend-specific integration guidance is in `docs/BACKEND-HANDOFF.md`.
 
-- `src/lib/client/api.ts` sends same-origin requests with HttpOnly cookie sessions. It does not keep credentials in browser storage.
-- `src/app/api/v1/` contains the existing backend routes. Preserve the public contract in [`openapi.yaml`](../openapi.yaml).
-- `src/lib/http.ts` handles permissions, origin checks, validation, and content-free errors/logs. Keep protected routes behind this wrapper.
-- `src/lib/identity/adapter.ts` handles fixture or campus identity. Role checks must remain server-side.
-- `src/lib/supabase/admin.ts` is server-only. Never expose a service-role key or import this module into a client component.
-- `supabase/migrations/` contains the schema and lifecycle functions. Preserve atomic booking, cancellation, and audited content reads.
+## Important behaviors
 
-| UI operation | Existing API |
-| --- | --- |
-| Load services | `GET /api/v1/services` |
-| Suggest services | `POST /api/v1/finder/suggest` |
-| Sign in / sign out | `POST` / `DELETE /api/v1/session` |
-| Read current role | `GET /api/v1/me` |
-| Submit / list student requests | `POST /api/v1/requests`, `GET /api/v1/requests/me` |
-| Load available appointment times | `GET /api/v1/requests/{id}/slots` |
-| Book / cancel | `POST /api/v1/appointments`, `POST /api/v1/appointments/{id}/cancel` |
-| Practitioner queue / audited read | `GET /api/v1/queue`, `POST /api/v1/requests/{id}/content-views` |
-| Practitioner availability | `GET` / `POST /api/v1/slots`, `DELETE /api/v1/slots/{id}` |
-| Coordinator overview | `GET /api/v1/coordinator/requests` |
+- Students choose an available time before submitting. Submission reserves the session and its buffer; a practitioner then approves, reschedules, rejects, or cancels.
+- Only an optional alias is requested. No student login, legal name, email, or student ID fields.
+- Urgency is `ROUTINE` or `URGENT`. Emergency guidance remains visible, and urgent results explain that staff cannot contact anonymous students.
+- AI runs only with explicit consent. An AI failure never blocks manual submission.
+- Each submission gets one `Idempotency-Key`. A failed response with an unknown outcome locks the original body for safe retry and key recovery. Definitively rejected submissions may be edited and retried.
+- The access key appears in a confirmation dialog with copy and tracking actions. It is never placed in a URL, browser storage, or logs. A same-tab navigation handoff holds it in memory only. The student must save the key privately before refreshing or leaving.
+- Status lookup uses `X-Access-Key`. Unknown keys show a neutral not-found message. The dashboard does not repeat the intake note.
+- Students explicitly confirm cancellation. Practitioner decisions also require confirmation.
+- Appointment and opening-hour controls consistently display campus time: Bangkok, UTC+7. The slot picker uses returned timestamps and availability; it does not calculate real booking rules.
+- Practitioner schedules show pending/confirmed sessions and separate privacy-buffer blocks. Staff responses never contain student access keys.
+- Admin editing preserves all returned opening windows, including multiple windows per day. Client validation rejects reversed or overlapping windows before saving.
+- Database credentials remain server-only; staff permissions remain enforced by the backend.
 
-Use the OpenAPI document for exact fields, status codes, and remaining routes. If a separate backend is introduced, preserve the same-origin browser interface through server-side integration rather than putting database secrets in browser code.
+## Verification
 
-## Behaviors to preserve
+Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm check:openapi`, `pnpm build`, and `pnpm scan:bundle`.
 
-1. A student submits a request; opening it as the appropriate practitioner moves it into review through the audited read.
-2. Non-urgent requests become bookable after review. Booking uses the actual request and slot UUIDs and requires explicit confirmation.
-3. Urgent requests display emergency guidance and do not enter the booking flow.
-4. Cancellation releases the appointment but does not reopen the handled request.
-5. The student dashboard shows metadata, not the previous private request text. The coordinator never receives that text.
-6. Dates use the device timezone. The UI does not invent duration, location, or practitioner details absent from the API.
+Frontend unit coverage includes header privacy, idempotency headers, campus date boundaries, and the preview submit/retry/lookup/cancel lifecycle. Database integration tests reseed fixtures and should only run against a dedicated test database.
 
-## Design and verification
-
-[`DESIGN.md`](../DESIGN.md) records the photograph background, frosted glass surfaces, navigation layout, accessibility behavior, and local typography. Font files and their license notices live in `src/app/fonts/`; no font download is needed to build the application. Campus photography is illustrative.
-
-Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm check:openapi`, and `pnpm build`. Integration tests use a database and reseed fixtures; use a dedicated test database rather than a shared demo database.
-
-For a manual journey, use separate browser profiles for a student, the service's practitioner, and the coordinator. Submit a fictional request, review it as the practitioner, book and cancel as the student, and verify that the coordinator sees metadata only. Also check urgent guidance, service-loading retry, mobile navigation, and the collapsible desktop sidebar.
+For connected acceptance, use a fictional student note and separate staff browser profiles: choose service/time, submit without login, save the key, approve or reschedule as practitioner, check the new status using the key, then cancel. Also exercise a taken-slot response, AI failure, wrong key, signed-out staff, inactive services, empty opening hours, and mobile navigation.

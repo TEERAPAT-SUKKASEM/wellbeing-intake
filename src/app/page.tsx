@@ -1,24 +1,15 @@
 import { EmergencyBanner } from "@/components/EmergencyBanner";
 import { ServiceFinder } from "@/components/ServiceFinder";
 import { uiPreview } from "@/lib/ui-preview";
-import { CampusHero } from "@/components/CampusHero";
+import Link from "next/link";
+import { UiIcon } from "@/components/UiIcon";
 
 export default function HomePage() {
   return (
-    <div className="retreat-home space-y-8 sm:space-y-10 lg:space-y-12">
-      <CampusHero />
-      <EmergencyBanner />
-      <ServiceFinder preview={uiPreview} />
-      <section aria-labelledby="next-heading" className="how-it-works">
-        <h2 id="next-heading" className="display-heading text-3xl">A clear path from here</h2>
-        <ol className="mt-6 grid gap-6 sm:grid-cols-3">
-          {[
-            ["01", "Choose your support", "Learn what each service offers and what a first visit looks like."],
-            ["02", "Tell us what you need", "Send a private request to the practitioners of your chosen service."],
-            ["03", "Find a time that suits", "After a practitioner reviews your request, choose an available appointment."],
-          ].map(([number, title, detail]) => <li key={number} className="border-l border-base-300 pl-4"><p className="text-xs font-semibold text-base-content/70">{number}</p><h3 className="mt-2 font-semibold">{title}</h3><p className="mt-1 text-sm text-base-content/70">{detail}</p></li>)}
-        </ol>
-      </section>
+    <div className="student-home bento-home">
+      <header className="route-intro"><h1 id="services-heading">Counselling appointments</h1><p>Choose a service and time. No student account or personal details required.</p></header>
+      <div className="bento-layout"><EmergencyBanner /><ServiceFinder preview={uiPreview} /><section className="bento-tracking card" aria-labelledby="bento-tracking-heading"><h2 id="bento-tracking-heading">Already sent a request?</h2><p>Check approval, see time changes, or cancel. You’ll need the private access key shown after you submitted your request.</p><Link href="/requests" className="tracking-status-link"><UiIcon name="status" className="size-5" />Check request status</Link></section></div>
+      <p className="service-buffer-note">A 15-minute privacy buffer follows every session.</p>
     </div>
   );
 }
