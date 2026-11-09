@@ -1,4 +1,4 @@
-// NFR-18: every implemented route must appear in openapi.yaml, and vice versa.
+// Every implemented route must appear in openapi.yaml, and vice versa.
 // Dependency-free: reads route files from disk and path keys from the YAML text.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";

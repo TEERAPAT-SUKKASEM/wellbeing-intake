@@ -43,12 +43,13 @@ jobs:
             echo "HUB_SIGNING_SECRET=ci-outbound-secret"
             echo "HUB_INBOUND_SECRET=ci-inbound-secret"
             echo "DISPATCH_TOKEN=ci-dispatch-token"
+            echo "ACCESS_KEY_SECRET=ci-access-key-secret"
           } > .env.local
           rm status.env
 
-      - name: Integration tests (seven mandated areas + platform contract)
+      - name: Integration tests (the PRD's TEST-01 to TEST-07, booking, platform)
         run: pnpm test:integration
 
       - run: pnpm build
-      - name: Client bundle must contain no server secret (PRD R-2)
+      - name: Client bundle must contain no server secret
         run: pnpm scan:bundle

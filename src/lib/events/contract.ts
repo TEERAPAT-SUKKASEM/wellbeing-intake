@@ -1,31 +1,42 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
-// Platform event envelope (platform PRD §4) and Team 16's two outbound types (PRD §11.5).
+// The PRD's webhook contract. The body is exactly the PRD's fields and nothing else: no alias, no
+// intake note, no urgency, no service. Everything a receiver needs for safety goes in headers, so the
+// body stays clean: X-Event-Id (stable across retries, for de-duplication) and the HMAC signature.
 // This file has no server-only dependency so the contract can be unit-tested directly.
 
-export const SOURCE = "wellbeing";
-export const REMINDER_MESSAGE = "You have an appointment.";
+const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 
-// NFR-06: `.strict()` makes any field outside the allowlist a validation failure.
-export const reminderData = z
+export const confirmedEvent = z
   .object({
-    appointmentAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/),
-    message: z.literal(REMINDER_MESSAGE),
-    reference: z.uuid(),
+    event_type: z.literal("appointment.confirmed"),
+    appointment_id: z.string().regex(/^req_[a-z0-9]+$/),
+    scheduled_time: z.string().regex(ISO_UTC),
+    privacy_buffer_end: z.string().regex(ISO_UTC),
   })
   .strict();
 
-export const cancelledData = z.object({ reference: z.uuid() }).strict();
+/** Added to the PRD: without it the Hub would keep reminding about a cancelled appointment. */
+export const cancelledEvent = z
+  .object({
+    event_type: z.literal("appointment.cancelled"),
+    appointment_id: z.string().regex(/^req_[a-z0-9]+$/),
+  })
+  .strict();
 
-export const dataSchemas = {
-  "appointment.reminder": reminderData,
-  "appointment.cancelled": cancelledData,
-} as const;
+export const outboundEvent = z.discriminatedUnion("event_type", [confirmedEvent, cancelledEvent]);
+export type OutboundEvent = z.infer<typeof outboundEvent>;
 
-export type OutboundType = keyof typeof dataSchemas;
+/** Validated again at send time: nothing over-full ever leaves. */
+export function buildEventBody(row: { type: string; payload: unknown }): OutboundEvent {
+  const body = outboundEvent.parse(row.payload);
+  if (body.event_type !== row.type) throw new Error("event_type_mismatch");
+  return body;
+}
 
-export const envelope = z
+// Delivery receipts FROM the Notification Hub still arrive in the platform envelope.
+export const inboundEnvelope = z
   .object({
     eventId: z.uuid(),
     type: z.string().min(1),
@@ -36,33 +47,10 @@ export const envelope = z
   })
   .strict();
 
-export type Envelope = z.infer<typeof envelope>;
-
-export function buildEnvelope(row: {
-  event_id: string;
-  type: string;
-  occurred_at: string;
-  subject: string;
-  payload: unknown;
-}): Envelope {
-  const schema = dataSchemas[row.type as OutboundType];
-  if (!schema) throw new Error("unknown_event_type");
-  // Validated again at send time: nothing over-full ever leaves (NFR-06).
-  const data = schema.parse(row.payload);
-  return {
-    eventId: row.event_id,
-    type: row.type,
-    occurredAt: new Date(row.occurred_at).toISOString(),
-    source: SOURCE,
-    subject: row.subject,
-    data,
-  };
-}
-
 // --- Signing ---------------------------------------------------------------
-// Assumption (NFR-17): HMAC-SHA256 over `${timestamp}.${rawBody}` with a shared secret,
-// until Teams 20/23 fix the platform scheme. The timestamp bounds replay.
+// HMAC-SHA256 over `${timestamp}.${rawBody}` with a shared secret. The timestamp bounds replay.
 
+export const EVENT_ID_HEADER = "x-event-id";
 export const SIGNATURE_HEADER = "x-signature";
 export const TIMESTAMP_HEADER = "x-signature-timestamp";
 export const MAX_SKEW_SECONDS = 300;

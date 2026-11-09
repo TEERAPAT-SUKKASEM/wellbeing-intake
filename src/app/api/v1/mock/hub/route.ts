@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { env } from "@/lib/env";
 import { CORRELATION_HEADER, machineAuthorized } from "@/lib/http";
-import { SIGNATURE_HEADER, TIMESTAMP_HEADER, dataSchemas, envelope, verify, type OutboundType } from "@/lib/events/contract";
+import { EVENT_ID_HEADER, SIGNATURE_HEADER, TIMESTAMP_HEADER, outboundEvent, verify } from "@/lib/events/contract";
 
-// Contract mock of the Notification Hub (C-07): a stand-in for Team 20's endpoint that
-// verifies the signature and the envelope over REAL HTTP — so "mock the consumer" exercises
-// the true delivery path. Enabled only when MOCK_HUB_ENABLED=true; 404 otherwise.
+// Contract mock of the Notification Hub: it verifies the signature and the exact event body over REAL
+// HTTP, so "mock the consumer" still exercises the true delivery path. Enabled only when
+// MOCK_HUB_ENABLED=true; 404 otherwise.
 //
-// PUT toggles an outage, for the degradation rehearsal:  { "fail": true | false }
+// PUT toggles an outage for the degradation rehearsal:  { "fail": true | false }
 // (requires `Authorization: Bearer <DISPATCH_TOKEN>`)
 
 const state = globalThis as unknown as { __mockHubFail?: boolean };
@@ -34,18 +34,14 @@ export async function POST(req: Request): Promise<Response> {
   } catch {
     return reply(400, { error: "invalid_json" }, cid);
   }
-  const parsed = envelope.safeParse(body);
-  if (!parsed.success) return reply(400, { error: "invalid_envelope" }, cid);
+  const parsed = outboundEvent.safeParse(body);
+  if (!parsed.success) return reply(422, { error: "body_outside_contract" }, cid);
 
-  const schema = dataSchemas[parsed.data.type as OutboundType];
-  if (!schema || !schema.safeParse(parsed.data.data).success) {
-    return reply(422, { error: "data_outside_contract" }, cid);
-  }
-
+  const eventId = req.headers.get(EVENT_ID_HEADER);
   console.log(
-    JSON.stringify({ t: new Date().toISOString(), svc: "mock-hub", cid, eventId: parsed.data.eventId, type: parsed.data.type, accepted: true }),
+    JSON.stringify({ t: new Date().toISOString(), svc: "mock-hub", cid, eventId, type: parsed.data.event_type, accepted: true }),
   );
-  return reply(202, { accepted: true, eventId: parsed.data.eventId }, cid);
+  return reply(202, { accepted: true, eventId }, cid);
 }
 
 export async function PUT(req: Request): Promise<Response> {

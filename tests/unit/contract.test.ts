@@ -1,56 +1,61 @@
 import { describe, expect, it } from "vitest";
-import { REMINDER_MESSAGE, buildEnvelope, envelope, reminderData, cancelledData, sign, verify } from "@/lib/events/contract";
+import { buildEventBody, cancelledEvent, confirmedEvent, inboundEnvelope, sign, verify } from "@/lib/events/contract";
 
-const reference = "6f1c2a9e-7b1d-4c55-9a53-0d2f8e4b7a10";
-const row = {
-  event_id: "b3e0d6c4-2f7a-4e91-8c1d-5a9f3b2e6d47",
-  type: "appointment.reminder",
-  occurred_at: "2026-10-05T02:00:00Z",
-  subject: "student:abc-123",
-  payload: { appointmentAt: "2026-10-06T02:00:00Z", message: REMINDER_MESSAGE, reference },
+// The webhook body from the PRD, section 6.
+const confirmed = {
+  event_type: "appointment.confirmed",
+  appointment_id: "req_8842",
+  scheduled_time: "2026-11-10T10:00:00Z",
+  privacy_buffer_end: "2026-11-10T11:00:00Z",
 };
 
-describe("reminder payload allowlist (NFR-06, FR-18)", () => {
-  it("accepts exactly date/time, generic text, opaque reference", () => {
-    expect(reminderData.safeParse(row.payload).success).toBe(true);
+describe("appointment.confirmed: zero sensitive data", () => {
+  it("accepts exactly the PRD's example", () => {
+    expect(confirmedEvent.safeParse(confirmed).success).toBe(true);
+    expect(buildEventBody({ type: "appointment.confirmed", payload: confirmed })).toEqual(confirmed);
   });
 
-  it.each(["serviceName", "practitioner", "reason", "triageLevel", "description"])(
-    "blocks an over-full payload carrying %s",
-    (field) => {
-      expect(reminderData.safeParse({ ...row.payload, [field]: "x" }).success).toBe(false);
-      expect(() => buildEnvelope({ ...row, payload: { ...row.payload, [field]: "x" } })).toThrow();
-    },
-  );
-
-  it("only allows the fixed generic wording", () => {
-    expect(reminderData.safeParse({ ...row.payload, message: "Your counselling session is tomorrow" }).success).toBe(false);
+  it.each(["intake_note", "alias", "urgency_level", "service_id", "access_key", "subject"])("blocks an over-full body carrying %s", (field) => {
+    const overFull = { ...confirmed, [field]: "x" };
+    expect(confirmedEvent.safeParse(overFull).success).toBe(false);
+    expect(() => buildEventBody({ type: "appointment.confirmed", payload: overFull })).toThrow();
   });
 
-  it("retraction data is the opaque reference only", () => {
-    expect(cancelledData.safeParse({ reference }).success).toBe(true);
-    expect(cancelledData.safeParse({ reference, appointmentAt: "2026-10-06T02:00:00Z" }).success).toBe(false);
-  });
-});
-
-describe("platform envelope (NFR-17)", () => {
-  it("has exactly the six platform fields and a constant source", () => {
-    const e = buildEnvelope(row);
-    expect(Object.keys(e).sort()).toEqual(["data", "eventId", "occurredAt", "source", "subject", "type"]);
-    expect(e.source).toBe("wellbeing");
-    expect(e.eventId).toBe(row.event_id);
-    expect(envelope.safeParse(e).success).toBe(true);
+  it("refuses a body whose type does not match its outbox row", () => {
+    expect(() => buildEventBody({ type: "appointment.cancelled", payload: confirmed })).toThrow();
   });
 
-  it("names no service, practitioner or reason anywhere in the serialized event", () => {
-    const text = JSON.stringify(buildEnvelope(row)).toLowerCase();
-    for (const word of ["counsel", "clinic", "physio", "nurse", "urgent", "triage"]) expect(text).not.toContain(word);
+  it("refuses times that are not exact UTC", () => {
+    expect(confirmedEvent.safeParse({ ...confirmed, scheduled_time: "tomorrow" }).success).toBe(false);
+    expect(confirmedEvent.safeParse({ ...confirmed, scheduled_time: "2026-11-10T10:00:00+07:00" }).success).toBe(false);
   });
 });
 
-describe("webhook signing (NFR-17)", () => {
+describe("appointment.cancelled", () => {
+  it("carries the id only", () => {
+    expect(cancelledEvent.safeParse({ event_type: "appointment.cancelled", appointment_id: "req_8842" }).success).toBe(true);
+    expect(cancelledEvent.safeParse({ event_type: "appointment.cancelled", appointment_id: "req_8842", scheduled_time: "x" }).success).toBe(false);
+  });
+});
+
+describe("inbound receipts", () => {
+  it("still use the platform envelope", () => {
+    const receipt = {
+      eventId: "b3e0d6c4-2f7a-4e91-8c1d-5a9f3b2e6d47",
+      type: "notification.delivered",
+      occurredAt: "2026-11-10T10:00:00Z",
+      source: "notification-hub",
+      subject: "reference:req_8842",
+      data: { reference: "req_8842" },
+    };
+    expect(inboundEnvelope.safeParse(receipt).success).toBe(true);
+    expect(inboundEnvelope.safeParse({ ...receipt, extra: 1 }).success).toBe(false);
+  });
+});
+
+describe("webhook signing", () => {
   const secret = "test-secret";
-  const body = JSON.stringify(buildEnvelope(row));
+  const body = JSON.stringify(confirmed);
   const now = 1_790_000_000_000;
   const ts = String(now / 1000);
 
