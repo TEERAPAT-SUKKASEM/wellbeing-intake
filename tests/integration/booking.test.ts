@@ -1,3 +1,8 @@
+// What this test file does: it tests the booking API end to end on the real local database: services,
+// slots, new requests, the practitioner's quick actions, the schedule and the admin settings.
+// Why it matters: it covers the rules around the PRD's 7 tests: no double booking (even in a race), safe
+// retries, legal status changes only, staff-only actions, and admin changes that students really see.
+// How to run it: `pnpm test:integration` (needs the local Supabase database from `pnpm db:start`).
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { GET as getAvailability, PUT as putAvailability } from "@/app/api/v1/admin/availability/route";
@@ -26,9 +31,11 @@ import {
   submit,
 } from "./helpers";
 
+// Sends a Triage Desk decision (PATCH /requests/{id}/status), logged in as a practitioner by default.
 const decideAs = (id: string, body: Record<string, unknown>, as: string = USERS.practitioner) =>
   call(decide, { method: "PATCH", path: `/requests/${id}/status`, as, params: { id }, body });
 
+// Students see the active services, in the shape the PRD defines.
 describe("GET /services", () => {
   it("returns active services in the PRD's shape", async () => {
     const r = await call(services, { path: "/services" });
@@ -38,6 +45,7 @@ describe("GET /services", () => {
   });
 });
 
+// The slot list checks its input, and never offers a past time or a time too far ahead.
 describe("GET /slots", () => {
   it("validates its query and hides unknown services", async () => {
     expect((await call(slotsRoute, { path: "/slots" })).status).toBe(400);
@@ -54,6 +62,8 @@ describe("GET /slots", () => {
   });
 });
 
+// Booking rules: one winner per time, only real future slots, safe retries with an Idempotency-Key,
+// and crisis wording always marked URGENT.
 describe("POST /requests", () => {
   it("two students racing for one time: exactly one wins, the other gets refreshed slots", async () => {
     const slot = await nextFreeSlot();
@@ -138,6 +148,7 @@ describe("POST /requests", () => {
   });
 });
 
+// The urgency preview works with the AI off, saves nothing, logs no student text and echoes nothing back.
 describe("POST /triage/assess", () => {
   it("works with the AI off, stores nothing and logs no text", async () => {
     const sentinel = "AssessSentinel I want to die";
@@ -160,6 +171,8 @@ describe("POST /triage/assess", () => {
   });
 });
 
+// Approve, reject, reschedule and cancel hold or free the time correctly; illegal moves and
+// non-practitioners are refused.
 describe("PATCH /requests/{id}/status: the Triage Desk's quick actions", () => {
   it("approve, then the student sees CONFIRMED", async () => {
     const created = await book();
@@ -260,6 +273,7 @@ describe("PATCH /requests/{id}/status: the Triage Desk's quick actions", () => {
   });
 });
 
+// The practitioner timeline shows each session with its buffer end, and needs a practitioner login.
 describe("GET /practitioner/schedule", () => {
   it("returns pending and confirmed sessions with their buffer ends", async () => {
     const created = await book();
@@ -278,6 +292,7 @@ describe("GET /practitioner/schedule", () => {
   });
 });
 
+// Only an admin can change services and opening hours, and students see each change at once.
 describe("Administrator configuration", () => {
   it("only an administrator can reach it", async () => {
     for (const r of [

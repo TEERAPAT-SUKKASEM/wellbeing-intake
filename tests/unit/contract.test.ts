@@ -1,3 +1,8 @@
+// What this test file does: it checks the exact shape of the webhook events we send to the Notification
+// Hub, and the signature (HMAC) that proves a webhook really came from the right sender.
+// Why it matters: it is the unit-level proof for PRD TEST-07. appointment.confirmed may carry only the
+// 4 fields in PRD section 6, so no intake note, alias or urgency can ever leave the system.
+// How to run it: `pnpm test`.
 import { describe, expect, it } from "vitest";
 import { buildEventBody, cancelledEvent, confirmedEvent, inboundEnvelope, sign, verify } from "@/lib/events/contract";
 
@@ -9,6 +14,7 @@ const confirmed = {
   privacy_buffer_end: "2026-11-10T11:00:00Z",
 };
 
+// The PRD's example body is accepted; the same body with any one extra field is refused.
 describe("appointment.confirmed: zero sensitive data", () => {
   it("accepts exactly the PRD's example", () => {
     expect(confirmedEvent.safeParse(confirmed).success).toBe(true);
@@ -31,6 +37,7 @@ describe("appointment.confirmed: zero sensitive data", () => {
   });
 });
 
+// The cancelled event carries only its type and the appointment id, nothing more.
 describe("appointment.cancelled", () => {
   it("carries the id only", () => {
     expect(cancelledEvent.safeParse({ event_type: "appointment.cancelled", appointment_id: "req_8842" }).success).toBe(true);
@@ -38,6 +45,7 @@ describe("appointment.cancelled", () => {
   });
 });
 
+// Receipts coming back from the Hub must match the shared envelope exactly, with no extra fields.
 describe("inbound receipts", () => {
   it("still use the platform envelope", () => {
     const receipt = {
@@ -53,6 +61,7 @@ describe("inbound receipts", () => {
   });
 });
 
+// A signature is valid only for the same body, the same secret and a recent timestamp (no replays).
 describe("webhook signing", () => {
   const secret = "test-secret";
   const body = JSON.stringify(confirmed);

@@ -1,3 +1,8 @@
+// What this test file does: it checks suggestServices(), the full service matcher: crisis phrases, the
+// attack guard, the AI switch, the daily budget, then the AI with the keyword matcher as fallback.
+// Why it matters: a crisis must always get emergency guidance, attacks must cost nothing, any AI problem
+// must fall back to keywords, and the log line must hold no student text.
+// How to run it: `pnpm test`.
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogueEntry } from "@/lib/matching/rules";
@@ -39,6 +44,7 @@ afterEach(() => {
 
 const fallback = (recommendations: unknown[]) => ({ mode: "DETERMINISTIC_FALLBACK", urgent_guidance: false, recommendations });
 
+// Each path is tested, including whether the shared budget (rpc) or the AI (fetch) was touched.
 describe("suggestServices", () => {
   it("uses the AI when it works", async () => {
     fetchMock.mockResolvedValue(
@@ -110,6 +116,8 @@ describe("suggestServices", () => {
   });
 });
 
+// The log line has only fixed fields (time, app name, kind, correlation id, mode, duration), never the
+// student's text, the suggested services or whether emergency guidance was shown.
 describe("logMatch", () => {
   it("logs the mode and timing only", () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});

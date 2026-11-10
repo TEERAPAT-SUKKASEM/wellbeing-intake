@@ -1,3 +1,8 @@
+// What this test file does: it checks the keyword service matcher and finalize(), and scores the matcher
+// on every case in eval/matcher-cases.json.
+// Why it matters: this matcher answers whenever the AI cannot. Running the eval cases here makes them
+// a CI quality gate: a new wrong answer fails `pnpm test`. (An extra feature beyond the PRD's 7 tests.)
+// How to run it: `pnpm test`.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
@@ -30,6 +35,7 @@ const [ACADEMIC, GENERAL, DROP_IN] = CATALOGUE.map((service) => service.id);
 
 const ids = (picks: Recommendation[]) => picks.map((pick) => pick.service_id);
 
+// Each service gets a topic from its name and description, and the eval service list matches the seed.
 describe("a service's topic comes from its own published words", () => {
   it("reads the seeded services", () => {
     expect(CATALOGUE.map(topicOf)).toEqual(["STUDY_SUPPORT", "GENERAL_SUPPORT", "URGENT_SUPPORT"]);
@@ -54,6 +60,7 @@ describe("a service's topic comes from its own published words", () => {
   });
 });
 
+// The keyword matcher suggests up to two active services, most specific first, or nothing if unsure.
 describe("matchDeterministic", () => {
   it("puts the most specific service first and the broad one second", () => {
     expect(matchDeterministic("Exams are affecting my sleep and I feel overwhelmed.", CATALOGUE)).toEqual([
@@ -93,6 +100,7 @@ describe("matchDeterministic", () => {
   });
 });
 
+// finalize() cleans every answer: real service ids only, no repeats, at most two, no extra fields.
 describe("finalize: the last word on every answer", () => {
   it("drops unknown ids and repeats, keeps the order, stops at two and strips extra fields", () => {
     const picks = [
@@ -109,6 +117,7 @@ describe("finalize: the last word on every answer", () => {
   });
 });
 
+// The eval set with no AI: no wrong answers except the known, marked misses, and most cases answered.
 describe("the eval cases (eval/matcher-cases.json), keyword path only", () => {
   // What the endpoint answers with the AI off: crisis phrases first, then the keyword matcher.
   const answer = (input: string) =>

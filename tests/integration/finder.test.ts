@@ -1,3 +1,8 @@
+// What this test file does: it tests the optional service helper endpoint, once with the AI switched off
+// and once with it switched on.
+// Why it matters: the helper is an extra feature beyond the PRD's 7 tests. It must stay anonymous, store
+// nothing, never suggest an inactive service, and fall back safely when the AI fails.
+// How to run it: `pnpm test:integration` (needs the local Supabase database from `pnpm db:start`).
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -20,6 +25,7 @@ async function counts() {
   return { requests: requests.count, events: events.count };
 }
 
+// With no AI, the keyword matcher answers. It saves nothing, logs no text and skips inactive services.
 describe("POST /finder/suggest with the AI off", () => {
   it("answers anonymously from the keyword matcher, stores nothing and logs no text", async () => {
     const sentinel = `FinderSentinel ${STUDY}`;
@@ -58,6 +64,8 @@ describe("POST /finder/suggest with the AI off", () => {
   });
 });
 
+// Input is checked before any AI call; good AI picks are used, bad ones fall back to keywords, and
+// crisis phrases, attacks and an empty budget skip the AI completely.
 describe("POST /finder/suggest with the AI on (local fake provider)", () => {
   let llm: Server;
   let reply: { status: number; content: unknown } = { status: 500, content: "" };
