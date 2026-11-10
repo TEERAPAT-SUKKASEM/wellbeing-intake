@@ -8,8 +8,10 @@
 // How this component is organised:
 // 1. State, then one effect that loads services and opening hours together.
 // 2. updateService() changes a service on screen only. saveService() sends one service to the server.
+//    discardDraft() puts back the last saved copy when an edit form is closed without saving.
 // 3. saveHours() checks the opening windows, then replaces the whole week on the server.
 // 4. Markup: a list of services, each with a fold-out edit form, then the opening hours form.
+//    Each save has its own busy state, so only the button that is saving shows "Saving…".
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -35,17 +37,24 @@ const weekdays = [
 export function AdminWorkspace() {
   const router = useRouter();
   // services and availability are null while loading. error: loading failed. message: save result.
-  // refresh: a counter for "Retry loading". busy: a save is running.
+  // refresh: a counter for "Retry loading".
+  // savingService: the ID of the service being saved (or null). savingHours: the opening hours are being saved.
   // editingService: the ID of the service whose edit form is open (only one at a time).
   const [services, setServices] = useState<Service[] | null>(null);
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [refresh, setRefresh] = useState(0);
-  const [busy, setBusy] = useState(false);
+  // Two busy states instead of one shared flag, so saving one form does not block or relabel the other.
+  const [savingService, setSavingService] = useState<string | null>(null);
+  const [savingHours, setSavingHours] = useState(false);
   const [editingService, setEditingService] = useState<string | null>(null);
-  // locked stops a second save while one is running. A ref changes at once, before React re-renders.
-  const locked = useRef(false);
+  // locked stops a second click on the same save while it is running. A ref changes at once, before React re-renders.
+  // One lock for service saves and one for the opening hours, so one save never blocks the other.
+  const locked = useRef({ service: false, hours: false });
+  // savedServices: the last copy of every service that the server confirmed. Closing an edit form
+  // without saving puts this copy back. A ref is enough because it is never shown directly.
+  const savedServices = useRef<Service[]>([]);
   // Load all services (also inactive ones) and the opening hours at the same time.
   // 401 = not signed in: go to sign-in, then come back (next=/admin).
   // 404 = signed in, but not an administrator. "alive" ignores an answer after the page is closed.
@@ -69,6 +78,8 @@ export function AdminWorkspace() {
         return;
       }
       setServices(s.data ?? []);
+      // Remember the loaded services as the saved copy that unsaved edits go back to.
+      savedServices.current = s.data ?? [];
       setAvailability(a.data);
       setError("");
     });
@@ -83,11 +94,27 @@ export function AdminWorkspace() {
         rows?.map((s, i) => (i === index ? { ...s, ...patch } : s)) ?? null,
     );
   }
+  // Close an edit form without saving: throw away its changes and show the last saved copy again.
+  // The status message only says so when something had really changed.
+  function discardDraft(id: string) {
+    const saved = savedServices.current.find((s) => s.id === id);
+    const draft = services?.find((s) => s.id === id);
+    if (!saved || !draft) return;
+    const changed =
+      draft.name !== saved.name ||
+      draft.description !== saved.description ||
+      draft.duration_minutes !== saved.duration_minutes ||
+      draft.is_active !== saved.is_active;
+    if (!changed) return;
+    setServices((rows) => rows?.map((s) => (s.id === id ? saved : s)) ?? null);
+    setMessage("Unsaved changes were discarded.");
+  }
   // Save one service. Only the editable fields are sent (not the ID), and the name is trimmed.
   async function saveService(service: Service) {
-    if (locked.current) return;
-    locked.current = true;
-    setBusy(true);
+    if (locked.current.service) return;
+    locked.current.service = true;
+    // Mark only this service as saving, so only its button shows "Saving…".
+    setSavingService(service.id);
     setMessage("");
     const { name, description, duration_minutes, is_active } = service;
     const r = await api<Service>(
@@ -97,13 +124,17 @@ export function AdminWorkspace() {
         body: { name: name.trim(), description, duration_minutes, is_active },
       },
     );
-    locked.current = false;
-    setBusy(false);
-    // On success, replace the service with the server's saved copy.
+    locked.current.service = false;
+    setSavingService(null);
+    // On success, replace the service with the server's saved copy, on screen and as the saved copy.
     // 409 name_exists: another service already has this name.
     if (r.ok && r.data) {
       setServices(
         (rows) => rows?.map((s) => (s.id === service.id ? r.data! : s)) ?? null,
+      );
+      // The server's copy is the new saved copy that later unsaved edits go back to.
+      savedServices.current = savedServices.current.map((s) =>
+        s.id === service.id ? r.data! : s,
       );
       setMessage(
         `Saved ${r.data.name}. Existing appointments keep their times.`,
@@ -117,7 +148,7 @@ export function AdminWorkspace() {
   }
   async function saveHours(e: React.FormEvent) {
     e.preventDefault();
-    if (!availability || locked.current) return;
+    if (!availability || locked.current.hours) return;
     // Check the windows before saving. Sort them by day and start time, then make sure each window
     // ends after it starts and does not overlap the window before it on the same day.
     // "HH:MM" times compare correctly as text, because they always have two digits.
@@ -139,8 +170,9 @@ export function AdminWorkspace() {
       );
       return;
     }
-    locked.current = true;
-    setBusy(true);
+    locked.current.hours = true;
+    // Mark only the opening hours as saving, so the service buttons stay as they are.
+    setSavingHours(true);
     setMessage("");
     // PUT replaces the whole week at once, so every window on screen is sent,
     // including several windows on the same day. The server checks the data again.
@@ -148,8 +180,8 @@ export function AdminWorkspace() {
       method: "PUT",
       body: availability,
     });
-    locked.current = false;
-    setBusy(false);
+    locked.current.hours = false;
+    setSavingHours(false);
     if (r.ok && r.data) {
       setAvailability(r.data);
       setMessage(
@@ -159,7 +191,9 @@ export function AdminWorkspace() {
   }
   // Each service has an "Edit" button that folds its form open or closed.
   // aria-expanded and aria-controls tell screen readers whether the form is open and which form it is.
-  // Every form is disabled (fieldset disabled) while a save is running.
+  // Closing a form (or opening another one) without saving throws away its unsaved changes.
+  // Only the form being saved is disabled (fieldset disabled) while its save is running.
+  // The "Edit" buttons are disabled while a service is saving, so that form stays open until it is done.
   return (
     <div className="space-y-6">
       <header className="route-intro">
@@ -203,7 +237,7 @@ export function AdminWorkspace() {
             <ul className="admin-service-list">
               {services.map((service, index) => (
                 <li key={service.id}>
-                  <h3><button type="button" className="admin-service-toggle" disabled={busy} aria-expanded={editingService === service.id} aria-controls={`service-editor-${service.id}`} onClick={() => setEditingService(editingService === service.id ? null : service.id)}><span className="admin-service-title"><span className="admin-service-number">{index + 1}.</span><span>{service.name}</span></span><span className="admin-service-edit-label">{editingService === service.id ? "Close" : "Edit"}<UiIcon name="arrow" className={editingService === service.id ? "size-4 -rotate-90" : "size-4 rotate-90"} /></span></button></h3>
+                  <h3><button type="button" className="admin-service-toggle" disabled={savingService !== null} aria-expanded={editingService === service.id} aria-controls={`service-editor-${service.id}`} onClick={() => { /* The form that closes loses its unsaved changes. */ if (editingService) discardDraft(editingService); setEditingService(editingService === service.id ? null : service.id); }}><span className="admin-service-title"><span className="admin-service-number">{index + 1}.</span><span>{service.name}</span></span><span className="admin-service-edit-label">{editingService === service.id ? "Close" : "Edit"}<UiIcon name="arrow" className={editingService === service.id ? "size-4 -rotate-90" : "size-4 rotate-90"} /></span></button></h3>
                   <div id={`service-editor-${service.id}`} hidden={editingService !== service.id}>
                 <form
                   className="admin-service-editor space-y-4"
@@ -213,8 +247,9 @@ export function AdminWorkspace() {
                     void saveService(service);
                   }}
                 >
+                  {/* Only this service's form is locked while this service is saving. */}
                   <fieldset
-                    disabled={busy}
+                    disabled={savingService === service.id}
                     className="grid gap-4 sm:grid-cols-2"
                   >
                     <label>
@@ -274,8 +309,8 @@ export function AdminWorkspace() {
                       />
                       Available to students
                     </label>
-                    <button className="btn btn-primary sm:justify-self-end" disabled={busy}>
-                      {busy ? "Saving…" : "Save service"}
+                    <button className="btn btn-primary sm:justify-self-end" disabled={savingService === service.id}>
+                      {savingService === service.id ? "Saving…" : "Save service"}
                     </button>
                   </fieldset>
                 </form>
@@ -293,7 +328,8 @@ export function AdminWorkspace() {
               Campus time (Bangkok, UTC+7). A day without a window is closed.
               Each session and its 15-minute buffer must fit inside a window.
             </p>
-            <fieldset disabled={busy} className="space-y-4">
+            {/* Only the opening hours form is locked while the opening hours are saving. */}
+            <fieldset disabled={savingHours} className="space-y-4">
               {/* One row per opening window: a day, an "Opens" time and a "Closes" time. */}
               {/* A day can have several windows. Edits stay on screen until the week is saved. */}
               {availability.windows.map((window, index) => (
@@ -389,8 +425,8 @@ export function AdminWorkspace() {
                 Add opening window
               </button>
             </fieldset>
-            <button className="btn btn-primary self-start" disabled={busy}>
-              {busy ? "Saving…" : "Save weekly opening hours"}
+            <button className="btn btn-primary self-start" disabled={savingHours}>
+              {savingHours ? "Saving…" : "Save weekly opening hours"}
             </button>
           </form>
         </>

@@ -58,6 +58,16 @@
   --depth: 0;
   --noise: 0;
 }
+/* --- Section: guard for daisyUI's border width ---
+ * daisyUI draws every field, radio button and checkbox border as `border: var(--border) solid ...`.
+ * `--border` is a very common variable name: some browser extensions inject their own
+ * `--border: 1px solid <colour>`, which makes that rule invalid, so text boxes, radio buttons and
+ * checkboxes lose their borders and seem to disappear (seen on 10 Nov 2026). `!important` keeps our
+ * value, whatever an extension adds. */
+:root,
+[data-theme] {
+  --border: 1px !important;
+}
 /* --- Section: font token; the Geist and Manrope font files are loaded in src/app/layout.tsx --- */
 @theme inline {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;

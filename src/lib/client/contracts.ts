@@ -130,6 +130,9 @@ export function errorMessage(error: string | null): string {
     return "That time is no longer available. Choose another available time.";
   if (error === "invalid_transition")
     return "This request has changed. Refresh to see its latest status.";
+  // too_late: the cancel endpoint refuses once the session has started (409 too_late).
+  if (error === "too_late")
+    return "This appointment has already started, so it can no longer be cancelled.";
   if (error === "validation_failed")
     return "Please check the form fields and try again.";
   return "We could not complete that action. Check your connection and try again.";
