@@ -9,9 +9,11 @@
 // Note: staff never see a student's access key. A student appears only by alias or "Anonymous student".
 //
 // How this component is organised:
-// 1. State, then effects for the booking popup and loading the queue and the schedule together.
-// 2. Helpers: reload() data, open() a request, confirm() asks first, decide() sends the decision.
-// 3. Markup: the tabs, the date and view controls, the two tab panels, the booking popup
+// 1. State, then effects for the booking popup, loading the queue and the schedule together,
+//    and the one-time referrals check.
+// 2. Helpers: selectDate() picks a day, reload() data, open() a request, confirm() asks first,
+//    decide() sends the decision, switchTab() changes tab.
+// 3. Markup: the tabs, the date and view controls, the tab panels, the booking popup
 //    of the chosen request, and the confirmation dialog.
 "use client";
 import { useEffect, useRef, useState } from "react";
@@ -41,22 +43,27 @@ export function PractitionerDesk() {
   const router = useRouter();
   // queue: pending requests (Review tab). schedule: sessions in the shown dates (Schedule tab).
   const [queue, setQueue] = useState<AppointmentRequest[]>([]);
+  // activeTab: the open tab. The desk always starts on Schedule.
   const [activeTab, setActiveTab] = useState<DeskTab>("schedule");
   // referralsOn: GET /practitioner/referrals answered 200, so the Helpdesk referrals tab is shown.
   // pendingReferrals: how many referrals wait for review, for that tab's badge.
   const [referralsOn, setReferralsOn] = useState(false);
   const [pendingReferrals, setPendingReferrals] = useState(0);
   const [schedule, setSchedule] = useState<AppointmentRequest[]>([]);
-  // date: the first day shown. It is today in Bangkok until the practitioner picks another date.
-  // days: 1 for the Day view, 7 for the Week view.
+  // today: today's date in Bangkok. It is "" until the page runs in the browser.
+  // date: the first day shown (in the Month view, the selected day). It is today in Bangkok until the
+  // practitioner picks another date (chosenDate).
   const today = useCampusToday();
   const [chosenDate, setDate] = useState("");
   const date = chosenDate || today;
-  // loading and error: status of the data load. refresh: a counter; adding 1 loads the data again.
+  // view: "day", "week" or "month". days: 1 for the Day view, 7 for the Week view (Month does not use it).
+  // rangeStart and rangeEnd: the dates sent to GET /practitioner/schedule. Day and Week: from date for
+  // "days" days. Month: the 1st to the last day of date's month. Both are "" until the date is known.
   const [view, setView] = useState("day");
   const days = view === "day" ? 1 : 7;
   const rangeStart = date ? view === "month" ? scheduleMonth(date).start : date : "";
   const rangeEnd = date ? view === "month" ? scheduleMonth(date).end : addDays(date, days - 1) : "";
+  // loading and error: status of the data load. refresh: a counter; adding 1 loads the data again.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
@@ -67,22 +74,22 @@ export function PractitionerDesk() {
   const [slot, setSlot] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  // decision: what the confirmation dialog will send: a new status, plus a new time when rescheduling.
+  // messageTone: shows that message as a success or as a problem ("danger").
   const [messageTone, setMessageTone] = useState<"success" | "danger">("success");
+  // decision: what the confirmation dialog will send: a new status, plus a new time when rescheduling.
   const [decision, setDecision] = useState<{
     status: RequestStatus;
     slot?: string;
   } | null>(null);
   // dialog: the confirmation dialog. detail: the booking popup, which gets focus when a request opens.
+  // opener: the element that opened the booking popup. Focus goes back to it when the popup closes.
   // locked: stops a double click from sending the same decision twice.
   const dialog = useRef<HTMLDialogElement>(null);
   const detail = useRef<HTMLDialogElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const locked = useRef(false);
-  // Load the queue and the schedule at the same time.
-  // 401 = not signed in: go to the sign-in page, then come back here (next=/practitioner).
-  // 404 = signed in, but not a practitioner (the server hides staff data from other roles).
-  // "alive" ignores an old answer when the date or the view changes quickly.
+  // Open the booking popup as a modal when a request is selected (only if it is not open yet),
+  // and close it when "selected" is cleared.
   useEffect(() => {
     if (selected) {
       if (!detail.current?.open) detail.current?.showModal();
@@ -90,6 +97,13 @@ export function PractitionerDesk() {
       detail.current?.close();
     }
   }, [selected]);
+  // Load the queue and the schedule at the same time.
+  // It waits until the date is known (rangeStart is "" before that), and runs again when the range
+  // changes or reload() adds 1 to refresh.
+  // 401 = not signed in: go to the sign-in page, then come back here (next=/practitioner).
+  // 404 = signed in, but not a practitioner (the server hides staff data from other roles).
+  // Any other failure shows one error for both, and the Review and Schedule panels stay hidden.
+  // "alive" ignores an old answer when the date or the view changes quickly.
   useEffect(() => {
     if (!rangeStart) return;
     let alive = true;
@@ -120,7 +134,6 @@ export function PractitionerDesk() {
     return () => {
       alive = false;
     };
-  // Close the booking popup and load fresh data.
   }, [rangeStart, rangeEnd, refresh, router]);
   // Ask once, alongside the loads above, whether Helpdesk referrals are on. Only a 200 answer shows the
   // third tab; 404 (feature off) or any other answer keeps it hidden. The answer also fills its badge.
@@ -135,6 +148,8 @@ export function PractitionerDesk() {
       alive = false;
     };
   }, []);
+  // Pick another date (from the date field or the month grid) and close the booking popup.
+  // In the Month view, a day in the same month keeps the same range, so no new load and no skeleton.
   function selectDate(next: string) {
     if (next === date) return;
     const changesRange = view !== "month" || next.slice(0, 7) !== date.slice(0, 7);
@@ -142,12 +157,14 @@ export function PractitionerDesk() {
     setSelected(null);
     if (changesRange) setLoading(true);
   }
+  // Close the booking popup and load fresh data. The skeleton shows until the new answer arrives.
   function reload() {
     setSelected(null);
     setLoading(true);
     setRefresh((n) => n + 1);
   }
   // Show one request in the booking popup and move keyboard focus to it (after the panel is drawn).
+  // It remembers the focused element (opener), and clears the reschedule picker and the old message.
   function open(row: AppointmentRequest) {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setSelected(row);
@@ -202,6 +219,7 @@ export function PractitionerDesk() {
     }
   }
   // The list of dates (YYYY-MM-DD) shown in the calendar, starting from "date".
+  // Day view: 1 date. Week view: 7 dates. Month view: only the selected day, listed under the month grid.
   const calendarDays = date
     ? Array.from({ length: view === "month" ? 1 : days }, (_, i) => addDays(date, i))
     : [];
@@ -215,7 +233,8 @@ export function PractitionerDesk() {
   // The tabs follow the ARIA tabs pattern: Left and Right arrows switch tabs, Home and End jump to the
   // first and last tab, and only the active tab is in the Tab key order (tabIndex 0 or -1).
   // The "Review requests" tab shows how many requests are waiting, in a badge and in its spoken label.
-  // Both panels stay in the page; the hidden attribute shows only the active one.
+  // Switching tabs does not remove a panel; the hidden attribute shows only the active one.
+  // The Review and Schedule panels wait for the queue and schedule load; the referrals panel does not.
   return (
     <div className="space-y-6">
       <header className="route-intro">
@@ -243,7 +262,11 @@ export function PractitionerDesk() {
         {referralsOn && <button type="button" role="tab" id="practitioner-referrals-tab" aria-controls="practitioner-referrals-panel" aria-selected={activeTab === "referrals"} aria-label={`Helpdesk referrals, ${pendingReferrals} waiting for review`} tabIndex={activeTab === "referrals" ? 0 : -1} disabled={busy} className="tab" onClick={() => switchTab("referrals")}>Helpdesk referrals <span className="request-count-badge" aria-hidden="true">{pendingReferrals}</span></button>}
       </div>
       <div className="flex flex-wrap items-end gap-4 rounded-box bg-base-100 p-5">
+        {/* The date field and the Day / Week / Month choice show only on the Schedule tab. */}
+        {/* Refresh shows on every tab, but it reloads only the queue and the schedule. */}
         {activeTab === "schedule" && <>
+        {/* In the Month view the date is the selected day; otherwise it is the first day shown. */}
+        {/* An empty date field gives "", which is ignored. */}
         <label>
           <span className="mb-2 block font-medium">{view === "month" ? "Selected date" : "Starting date"}</span>
           <input
@@ -258,6 +281,7 @@ export function PractitionerDesk() {
             }}
           />
         </label>
+        {/* A new view always gives a new date range, so the skeleton shows until it has loaded. */}
         <label>
           <span className="mb-2 block font-medium">View</span>
           <select
@@ -283,11 +307,13 @@ export function PractitionerDesk() {
           Campus time · Bangkok (UTC+7)
         </p>
       </div>
+      {/* The result of the last decision, once the booking popup has closed. */}
       {message && !selected && (
         <p role="status" className="booking-feedback" data-tone={messageTone}>
           {message}
         </p>
       )}
+      {/* The queue or schedule load failed. This shows on every tab, with a way to try again. */}
       {error && (
         <div role="alert" className="card gap-3 p-5">
           <p>{error}</p>
@@ -296,6 +322,8 @@ export function PractitionerDesk() {
           </button>
         </div>
       )}
+      {/* While the queue and the schedule load, a skeleton takes the place of the Review and Schedule */}
+      {/* panels. After an error those two panels stay hidden until a later load succeeds. */}
       {loading ? (
         <div
           className="skeleton h-60 w-full"
@@ -376,7 +404,10 @@ export function PractitionerDesk() {
                 Pending and confirmed appointments share one calendar. Every
                 session includes a separate 15-minute privacy buffer.
               </p>
+              {/* Month view: the month grid comes first. Picking a day there calls selectDate(), */}
+              {/* and that day's sessions show in the list below. */}
               {view === "month" && date && <PractitionerMonth date={date} today={today} schedule={schedule} busy={busy} onSelect={selectDate} />}
+              {/* One block per date in calendarDays. aria-live reads out the new list after a change. */}
               <div className="schedule-days" aria-live="polite">
                 {calendarDays.map((day) => {
                   // Put each session under its Bangkok date. campusDate() adds 7 hours to the UTC time,
@@ -388,6 +419,7 @@ export function PractitionerDesk() {
                   // shows the 15-minute privacy buffer: from the session end to privacy_buffer_end.
                   return (
                     <section key={day} className="min-w-0">
+                      {/* The day's name, e.g. "Tue 10 Nov". 12:00 UTC is 19:00 in Bangkok, the same date. */}
                       <h3 className="border-b border-base-300 pb-3 font-semibold">
                         {new Date(`${day}T12:00:00Z`).toLocaleDateString(
                           "en-GB",
@@ -407,6 +439,7 @@ export function PractitionerDesk() {
                         <ol className="space-y-4 pt-4">
                           {rows.map((row) => (
                             <li key={row.id}>
+                              {/* The session: time, status, urgency and alias. Its text is also its spoken name. */}
                               <button
                                 aria-haspopup="dialog"
                                 aria-controls="practitioner-booking"
@@ -428,6 +461,7 @@ export function PractitionerDesk() {
                                   {row.alias || "Anonymous student"}
                                 </span>
                               </button>
+                              {/* The buffer is plain text, not a button: it is time kept free, not a booking. */}
                               <div className="privacy-buffer rounded-b-field border border-t-0 border-base-300 bg-base-200 p-3 text-xs">
                                 <span className="block font-semibold">
                                   Privacy buffer
@@ -444,21 +478,27 @@ export function PractitionerDesk() {
                 })}
               </div>
             </section>
-            {/* Helpdesk referrals panel, only when the feature is on. HelpdeskReferrals loads its own list. */}
-            {referralsOn && (
-              <section
-                id="practitioner-referrals-panel"
-                role="tabpanel"
-                aria-labelledby="practitioner-referrals-tab"
-                hidden={activeTab !== "referrals"}
-                className="card card-border gap-4 p-5 sm:p-6"
-              >
-                <HelpdeskReferrals onPendingChange={setPendingReferrals} />
-              </section>
-            )}
           </>
         )
       )}
+      {/* Helpdesk referrals panel, only when the feature is on. HelpdeskReferrals loads its own list */}
+      {/* and shows its own loading and error states. It sits outside the queue and schedule wrapper */}
+      {/* above, so a slow or failed queue or schedule load never hides it. */}
+      {referralsOn && (
+        <section
+          id="practitioner-referrals-panel"
+          role="tabpanel"
+          aria-labelledby="practitioner-referrals-tab"
+          hidden={activeTab !== "referrals"}
+          className="card card-border gap-4 p-5 sm:p-6"
+        >
+          {/* key={refresh}: the desk's Refresh button (and every desk reload) also reloads the referrals. */}
+          <HelpdeskReferrals key={refresh} onPendingChange={setPendingReferrals} />
+        </section>
+      )}
+      {/* Booking popup (detail panel) for the chosen request. Escape or a click on the dark backdrop */}
+      {/* closes it, but not while a decision is saving. On close it clears the request and the picker, */}
+      {/* then puts focus back on the button that opened it, or on the active tab if that button is gone. */}
       <dialog
         ref={detail}
         id="practitioner-booking"
@@ -475,6 +515,8 @@ export function PractitionerDesk() {
         }}
       >
         {selected && <div className="modal-box practitioner-booking-panel space-y-5">
+          {/* The heading gets focus when the popup opens (autoFocus). The close button sits in a */}
+          {/* form with method="dialog", so the browser closes the dialog without extra code. */}
           <div className="booking-dialog-heading">
           <h2 id="detail-title" className="text-2xl font-semibold" tabIndex={-1} autoFocus>
             {selected.alias || "Anonymous request"}
@@ -485,11 +527,14 @@ export function PractitionerDesk() {
             <span className="booking-status" data-status={selected.status}>{STATUS_LABELS[selected.status]}</span>
             <span className={selected.urgency_level === "URGENT" ? "text-error font-semibold" : "text-base-content/70"}>{selected.urgency_level === "URGENT" ? "Urgent" : "Routine"}</span>
           </div>
+          {/* Date, session time and privacy buffer, all in Bangkok time. */}
           <dl className="booking-time-details">
             <div><dt>Appointment date</dt><dd>{new Date(selected.requested_slot_start).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Bangkok" })}</dd></div>
             <div><dt>Session time · Bangkok (UTC+7)</dt><dd>{campusTime(selected.requested_slot_start)}–{campusTime(selected.requested_slot_end)}</dd></div>
             <div className="booking-buffer"><dt>Privacy buffer</dt><dd>{campusTime(selected.requested_slot_end)}–{campusTime(selected.privacy_buffer_end)}</dd></div>
           </dl>
+          {/* Here only a failed decision shows. After a success or a 409 the reload closes the popup, */}
+          {/* and the message shows on the page instead. */}
           {message && <p role="status" className="booking-feedback" data-tone={messageTone}>{message}</p>}
           <section className="booking-note" aria-labelledby="booking-note-title"><h3 id="booking-note-title">Student note</h3><p className="whitespace-pre-wrap break-words">{selected.intake_note || "No note provided."}</p></section>
           {selected.urgency_level === "URGENT" && (
@@ -498,6 +543,7 @@ export function PractitionerDesk() {
               is anonymous and cannot be contacted through this app.
             </p>
           )}
+          {/* Approve only for a PENDING request. Reschedule for both pending and confirmed ones. */}
           <div className="booking-main-actions">
             {selected.status === "PENDING" && (
               <>
@@ -550,6 +596,7 @@ export function PractitionerDesk() {
               </button>
             </div>
           )}
+          {/* Reject only for a PENDING request. Cancel for both pending and confirmed ones. */}
           <div className="booking-danger-actions">
             <p>Rejection or cancellation releases the reserved time.</p>
             <div className="flex flex-wrap gap-3">
@@ -559,6 +606,8 @@ export function PractitionerDesk() {
           </div>
         </div>}
       </dialog>
+      {/* Confirmation dialog. Its title, text and main button follow "decision". "Go back" gets focus */}
+      {/* first, so Enter never sends a decision by mistake. Escape cannot close it while saving. */}
       <dialog
         ref={dialog}
         className="modal"

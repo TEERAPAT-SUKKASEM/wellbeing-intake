@@ -1,3 +1,10 @@
+// What this test file does: it checks the date maths behind the practitioner's Month view
+// (scheduleMonth and shiftScheduleMonth): the Monday-first grid, the month's first and last day,
+// and moving to the month before or after. No database or API is used.
+// Why it matters: the grid must show every day of the month on the right weekday, the date range the
+// desk asks for must stay within the schedule API's 31-day limit, and Previous / Next must never skip
+// a month (for example from 31 March) or break at a year change.
+// How to run it: `pnpm test`.
 import { describe, expect, it } from "vitest";
 import { scheduleMonth, shiftScheduleMonth } from "../../src/lib/client/schedule-month";
 
