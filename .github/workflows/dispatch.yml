@@ -1,3 +1,5 @@
+# What this file is for: a scheduled GitHub Actions workflow that calls the live app (it runs no tests).
+# When it is used: automatically every 3 hours, or by hand with "Run workflow" in the GitHub Actions tab.
 name: Dispatch & keep-alive
 
 # One call does both jobs: it touches the database, clearing Supabase Free's ~7-day inactivity
@@ -8,26 +10,37 @@ name: Dispatch & keep-alive
 # step is skipped, so the schedule never produces a failing run.
 
 on:
+  # Cron time is UTC: minute 17 of every 3rd hour (00:17, 03:17, 06:17 ...). Minute 17 avoids the busy
+  # start of the hour, when GitHub delays scheduled runs the most. Schedules run from `main` only.
   schedule:
     - cron: "17 */3 * * *"
+  # Adds a "Run workflow" button so the same job can be started by hand.
   workflow_dispatch:
 
+# The workflow needs no access to the repository at all; it only calls the app over HTTPS.
 permissions: {}
 
 jobs:
+  # The only job: check the app is healthy, then ask it to send waiting webhook deliveries.
   dispatch:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Repository secrets (Settings > Secrets and variables > Actions). GitHub hides their values in logs.
     env:
       APP_URL: ${{ secrets.APP_URL }}
       DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
     steps:
+      # Only runs while a secret is missing: print a note and finish green instead of failing.
       - name: Not configured yet
         if: env.APP_URL == '' || env.DISPATCH_TOKEN == ''
         run: echo "APP_URL and DISPATCH_TOKEN secrets are not set - skipping."
+      # GET /api/v1/health also runs a database query, which counts as activity for Supabase.
+      # `--fail` makes the step (and the run) fail if the app answers 503 (database down) or any error.
       - name: Health
         if: env.APP_URL != '' && env.DISPATCH_TOKEN != ''
         run: curl --fail --silent --show-error "$APP_URL/api/v1/health"
+      # POST to the protected dispatch endpoint with DISPATCH_TOKEN as a Bearer token. The app then
+      # retries pending webhook deliveries. The correlation id "gha-<run id>" finds this call in the logs.
       - name: Dispatch
         if: env.APP_URL != '' && env.DISPATCH_TOKEN != ''
         run: |

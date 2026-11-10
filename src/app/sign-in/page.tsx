@@ -1,3 +1,7 @@
+// What this page does: the sign-in form for staff (practitioners and admins). Students never use it.
+// URL: /sign-in (optional ?next=/practitioner or ?next=/admin)
+// Talks to: POST /api/v1/session (sign in), then GET /api/v1/me (read the staff role).
+// Note: the session lives in an HttpOnly cookie set by the server. This page saves no token or password.
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -6,11 +10,15 @@ import { api } from "@/lib/client/api";
 import Link from "next/link";
 import { UiIcon } from "@/components/UiIcon";
 
+// The home page for each staff role. A role that is not in this list cannot use the staff area.
 const HOME = { practitioner: "/practitioner", admin: "/admin" } as const;
 
+/** The form itself. It is a separate component so it can sit inside <Suspense> (see SignInPage). */
 function SignInForm() {
   const router = useRouter();
+  // ?next= is the staff page that sent the user here, for example /sign-in?next=/practitioner.
   const next = useSearchParams().get("next");
+  // Form state: the two fields, the error text, a busy flag (blocks double submit), show/hide password.
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -19,16 +27,21 @@ function SignInForm() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Check for empty fields in the browser first, so we do not send a request that must fail.
     if (!email.trim() || !password) {
       setError("Enter your staff email and password to sign in.");
       return;
     }
     setBusy(true);
     setError(null);
+    // Ask the server to sign in. On success it sets the session cookie. JavaScript cannot read
+    // that cookie (HttpOnly), and later API calls send it automatically.
     const r = await api("/session", {
       method: "POST",
       body: { email, password },
     });
+    // Turn the status code into a clear message: 429 = too many tries in a short time,
+    // 404 = demo sign-in is switched off (campus identity mode), anything else = wrong email or password.
     if (!r.ok) {
       setBusy(false);
       setError(
@@ -40,7 +53,9 @@ function SignInForm() {
       );
       return;
     }
+    // Signed in. Now ask the server who we are, so we know which workspace to open.
     const me = await api<{ role: keyof typeof HOME }>("/me");
+    // Stop here if the account has no staff role (not practitioner and not admin).
     if (!me.ok || !me.data || !HOME[me.data.role]) {
       setBusy(false);
       setError(
@@ -63,11 +78,16 @@ function SignInForm() {
         safe = null;
       }
     }
+    // If ?next= is missing or not allowed, go to the home page of the user's role.
     const target = safe ?? (me.data ? HOME[me.data.role] : "/");
+    // replace() so the Back button does not return to the sign-in form;
+    // refresh() so the app reloads its server data for the new signed-in state.
     router.replace(target);
     router.refresh();
   }
 
+  // noValidate turns off the browser's own pop-up checks, so our error message is shown instead.
+  // The box at the bottom sends students back to booking and tracking, which need no sign-in.
   return (
     <div className="auth-layout">
       <form
@@ -157,6 +177,7 @@ function SignInForm() {
   );
 }
 
+// useSearchParams() needs a <Suspense> boundary. Without it the production build fails for this page.
 export default function SignInPage() {
   return (
     <Suspense fallback={<p>Loading…</p>}>

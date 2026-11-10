@@ -303,6 +303,47 @@ paths:
                   - { $ref: "#/components/schemas/Guidance" }
         "400": { $ref: "#/components/responses/ValidationFailed" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
+  /finder/suggest:
+    post:
+      tags: [Student]
+      summary: Added to the PRD. Optional service suggestion for the home page helper
+      description: |
+        Service navigation only: not a diagnosis, and not an urgency assessment (that is `POST /triage/assess`).
+        The description goes to the AI provider, so the web app sends it only after the student consents, and
+        `ai_opt_in` must be `true` or nothing runs. Nothing is stored, and the text is never logged.
+        Recommendations only ever name services that are active right now, best first, at most two.
+        A crisis phrase returns `urgent_guidance: true` with no recommendations, without calling the AI; the page
+        then points to its fixed emergency contacts. If the AI is off, skipped or fails, a keyword matcher answers
+        with `mode: DETERMINISTIC_FALLBACK`, and an empty list when nothing clearly fits. Booking never depends on this.
+      operationId: suggestServices
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text, ai_opt_in]
+              properties:
+                text: { type: string, minLength: 1, maxLength: 500 }
+                ai_opt_in: { const: true, description: The student's consent to send the text to the AI provider. }
+            example: { text: Exams are affecting my sleep and I feel overwhelmed., ai_opt_in: true }
+      responses:
+        "200":
+          description: Up to two suggested services
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceSuggestions" }
+              example:
+                mode: AI_ASSISTED
+                urgent_guidance: false
+                recommendations:
+                  - { service_id: srv_academic_stress, reason_code: STUDY_SUPPORT }
+                  - { service_id: srv_general_counselling, reason_code: GENERAL_SUPPORT }
+        "400": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
   /admin/services:
     get:
       tags: [Administrator]
@@ -627,6 +668,12 @@ components:
             properties:
               error: { const: validation_failed }
               fields: { type: array, items: { type: string } }
+    ServiceUnavailable:
+      description: The service catalogue could not be read. Students can still browse and book once it is back.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: service_unavailable }
   schemas:
     Error:
       type: object
@@ -700,6 +747,29 @@ components:
               detail: { type: string }
               phone: { type: string, examples: ["1323"] }
               href: { type: string, examples: ["tel:1323"] }
+    ServiceSuggestions:
+      type: object
+      additionalProperties: false
+      required: [mode, urgent_guidance, recommendations]
+      properties:
+        mode: { $ref: "#/components/schemas/TriageMode" }
+        urgent_guidance:
+          type: boolean
+          description: True when the text suggests immediate danger. Recommendations are then always empty.
+        recommendations:
+          type: array
+          maxItems: 2
+          description: Active services only, best first, no repeats. Empty when nothing clearly fits.
+          items:
+            type: object
+            additionalProperties: false
+            required: [service_id, reason_code]
+            properties:
+              service_id: { type: string, minLength: 1, maxLength: 64 }
+              reason_code:
+                type: string
+                enum: [STUDY_SUPPORT, GENERAL_SUPPORT, URGENT_SUPPORT, RELATED_SERVICE]
+                description: Catalogue fit, not a diagnosis. The web app shows fixed wording for each code.
     RequestReceipt:
       allOf:
         - type: object

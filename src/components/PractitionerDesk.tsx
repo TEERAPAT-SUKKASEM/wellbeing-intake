@@ -1,3 +1,16 @@
+// What this component shows: the practitioner "Schedule & triage desk" with two tabs.
+// Schedule: day, week, and month calendars of pending and confirmed sessions, each followed by its privacy buffer.
+// Review requests: pending requests, urgent first. Opening one shows its note and the decision buttons.
+// Used on: /practitioner (signed-in practitioners only).
+// Talks to: GET /api/v1/practitioner/queue, GET /api/v1/practitioner/schedule?from=...&to=...,
+// PATCH /api/v1/requests/{id}/status, and GET /api/v1/slots (through SlotSelector) when rescheduling.
+// Note: staff never see a student's access key. A student appears only by alias or "Anonymous student".
+//
+// How this component is organised:
+// 1. State, then effects for the booking popup and loading the queue and the schedule together.
+// 2. Helpers: reload() data, open() a request, confirm() asks first, decide() sends the decision.
+// 3. Markup: the tabs, the date and view controls, the two tab panels, the booking popup
+//    of the chosen request, and the confirmation dialog.
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -20,12 +33,16 @@ import { UiIcon } from "./UiIcon";
 
 export function PractitionerDesk() {
   const router = useRouter();
+  // queue: pending requests (Review tab). schedule: sessions in the shown dates (Schedule tab).
   const [queue, setQueue] = useState<AppointmentRequest[]>([]);
   const [activeTab, setActiveTab] = useState<"schedule" | "reviews">("schedule");
   const [schedule, setSchedule] = useState<AppointmentRequest[]>([]);
+  // date: the first day shown. It is today in Bangkok until the practitioner picks another date.
+  // days: 1 for the Day view, 7 for the Week view.
   const today = useCampusToday();
   const [chosenDate, setDate] = useState("");
   const date = chosenDate || today;
+  // loading and error: status of the data load. refresh: a counter; adding 1 loads the data again.
   const [view, setView] = useState("day");
   const days = view === "day" ? 1 : 7;
   const rangeStart = date ? view === "month" ? scheduleMonth(date).start : date : "";
@@ -33,20 +50,29 @@ export function PractitionerDesk() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
+  // selected: the request open in the booking popup. rescheduling and slot: the replacement time picker.
+  // busy: a decision is being saved. message: the result shown after a decision.
   const [selected, setSelected] = useState<AppointmentRequest | null>(null);
   const [rescheduling, setRescheduling] = useState(false);
   const [slot, setSlot] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  // decision: what the confirmation dialog will send: a new status, plus a new time when rescheduling.
   const [messageTone, setMessageTone] = useState<"success" | "danger">("success");
   const [decision, setDecision] = useState<{
     status: RequestStatus;
     slot?: string;
   } | null>(null);
+  // dialog: the confirmation dialog. detail: the booking popup, which gets focus when a request opens.
+  // locked: stops a double click from sending the same decision twice.
   const dialog = useRef<HTMLDialogElement>(null);
   const detail = useRef<HTMLDialogElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const locked = useRef(false);
+  // Load the queue and the schedule at the same time.
+  // 401 = not signed in: go to the sign-in page, then come back here (next=/practitioner).
+  // 404 = signed in, but not a practitioner (the server hides staff data from other roles).
+  // "alive" ignores an old answer when the date or the view changes quickly.
   useEffect(() => {
     if (selected) {
       if (!detail.current?.open) detail.current?.showModal();
@@ -84,6 +110,7 @@ export function PractitionerDesk() {
     return () => {
       alive = false;
     };
+  // Close the booking popup and load fresh data.
   }, [rangeStart, rangeEnd, refresh, router]);
   function selectDate(next: string) {
     if (next === date) return;
@@ -97,6 +124,7 @@ export function PractitionerDesk() {
     setLoading(true);
     setRefresh((n) => n + 1);
   }
+  // Show one request in the booking popup and move keyboard focus to it (after the panel is drawn).
   function open(row: AppointmentRequest) {
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setSelected(row);
@@ -104,10 +132,13 @@ export function PractitionerDesk() {
     setSlot("");
     setMessage("");
   }
+  // Every decision first opens a confirmation dialog. Nothing is sent yet.
   function confirm(status: RequestStatus, newSlot?: string) {
     setDecision({ status, slot: newSlot });
     dialog.current?.showModal();
   }
+  // Send the confirmed decision. Approve = CONFIRMED, Reject = REJECTED, Cancel = CANCELLED.
+  // A reschedule sends CONFIRMED plus the new requested_slot_start, so it also approves the request.
   async function decide() {
     if (!selected || !decision || locked.current) return;
     locked.current = true;
@@ -126,6 +157,9 @@ export function PractitionerDesk() {
     locked.current = false;
     setBusy(false);
     dialog.current?.close();
+    // On success, show a message and reload. The student is anonymous, so they only see
+    // the change when they check their access key.
+    // 409 means the request changed meanwhile or the new time was taken, so reload to show the latest state.
     if (r.ok) {
       setMessageTone(decision.status === "REJECTED" || decision.status === "CANCELLED" ? "danger" : "success");
       setMessage(
@@ -144,15 +178,21 @@ export function PractitionerDesk() {
       if (r.status === 409) reload();
     }
   }
+  // The list of dates (YYYY-MM-DD) shown in the calendar, starting from "date".
   const calendarDays = date
     ? Array.from({ length: view === "month" ? 1 : days }, (_, i) => addDays(date, i))
     : [];
+  // Changing tabs also closes the booking popup and the reschedule picker.
   function switchTab(tab: "schedule" | "reviews") {
     setActiveTab(tab);
     setSelected(null);
     setRescheduling(false);
     setSlot("");
   }
+  // The tabs follow the ARIA tabs pattern: Left and Right arrows switch tabs, Home and End jump to the
+  // first and last tab, and only the active tab is in the Tab key order (tabIndex 0 or -1).
+  // The "Review requests" tab shows how many requests are waiting, in a badge and in its spoken label.
+  // Both panels stay in the page; the hidden attribute shows only the active one.
   return (
     <div className="space-y-6">
       <header className="route-intro">
@@ -258,6 +298,8 @@ export function PractitionerDesk() {
                 Urgent requests first, then the soonest requested time. Student
                 access keys are never available to staff.
               </p>
+              {/* The server already sorts the queue: urgent first, then the soonest time. */}
+              {/* A hidden request ID gives each "Review request" button a unique spoken name. */}
               {queue.length === 0 ? (
                 <p>No requests are awaiting a decision.</p>
               ) : (
@@ -309,9 +351,13 @@ export function PractitionerDesk() {
               {view === "month" && date && <PractitionerMonth date={date} today={today} schedule={schedule} busy={busy} onSelect={selectDate} />}
               <div className="schedule-days" aria-live="polite">
                 {calendarDays.map((day) => {
+                  // Put each session under its Bangkok date. campusDate() adds 7 hours to the UTC time,
+                  // so an early-morning Bangkok session is not shown on the day before.
                   const rows = schedule.filter(
                     (r) => campusDate(new Date(r.requested_slot_start)) === day,
                   );
+                  // Each session is a button (it opens the booking popup). Under it, a separate grey block
+                  // shows the 15-minute privacy buffer: from the session end to privacy_buffer_end.
                   return (
                     <section key={day} className="min-w-0">
                       <h3 className="border-b border-base-300 pb-3 font-semibold">
@@ -437,6 +483,8 @@ export function PractitionerDesk() {
               {rescheduling ? "Hide rescheduling" : "Reschedule"}
             </button>
           </div>
+          {/* Reschedule: the same slot picker students use, starting on the request's current date. */}
+          {/* It only shows free times, so the new time already respects the privacy buffers. */}
           {rescheduling && (
             <div id="booking-reschedule" className="space-y-4 border-t border-base-300 pt-5">
               <h3 className="font-semibold">Choose a replacement time</h3>

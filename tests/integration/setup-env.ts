@@ -1,5 +1,11 @@
+// What this file does: it runs before each integration test file and sets fixed settings: test secrets,
+// AI off, no webhook address, and rate limits so high that they never get in the way.
+// Why it matters: the tests must give the same result on every computer and in CI, and must never call
+// a real AI provider or a real Notification Hub.
+// How to run it: it is not run by itself; vitest.config.mts loads it for `pnpm test:integration`.
 import { config } from "dotenv";
 
+// Load the local database address and keys from .env.local, then .env.
 config({ path: ".env.local" });
 config({ path: ".env" });
 

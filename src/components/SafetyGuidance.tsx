@@ -1,5 +1,13 @@
+// What this component shows: a box with safety wording and emergency numbers for a Routine or Urgent result.
+// Used on: the booking page (/request/new): in the AI check result, the "Urgent support" dialog,
+// and the receipt after sending (RequestReceipt).
+// Talks to: no API calls. It only displays the result object it is given.
+// Note: an Urgent result uses role="alert", so screen readers read it at once.
+// A Routine result uses role="status", which is read politely when the reader is free.
 import type { Assessment } from "@/lib/client/contracts";
 export function SafetyGuidance({ result }: { result: Assessment }) {
+  // Only tel: links are made clickable. Any other link becomes "#",
+  // so an unexpected web address in the data is never opened.
   return (
     <div
       className="rounded-field border border-base-300 bg-base-100 p-4 text-sm"

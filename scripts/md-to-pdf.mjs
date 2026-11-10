@@ -1,5 +1,11 @@
+// What this script does: it turns a Markdown document (for example docs/PRD.md) into a PDF file, using
+// a Chrome or Edge browser that runs in the background with no window.
+// Why it matters: it makes printable PDF copies of the project documents, with diagrams drawn. It is a
+// documentation tool only; it does not touch the app or the database.
+// How to run it: `pnpm docs:pdf docs/PRD.md` (same as `node scripts/md-to-pdf.mjs <file.md> [out.pdf]`).
+//
 // Renders a Markdown file (GitHub-style, with mermaid diagrams) to PDF using headless Chrome/Edge.
-// Usage: node scripts/md-to-pdf.mjs docs/A3-Team16-Data-and-Query-Design.md
+// Usage: node scripts/md-to-pdf.mjs docs/PRD.md   (any Markdown file; writes the PDF next to it)
 // Needs internet once per run: marked and mermaid are loaded from the jsDelivr CDN.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -7,6 +13,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+// Step 1: read the input file name. The PDF goes next to it unless a second name is given.
 const input = process.argv[2];
 if (!input) {
   console.error("usage: node scripts/md-to-pdf.mjs <file.md> [out.pdf]");
@@ -14,6 +21,7 @@ if (!input) {
 }
 const output = resolve(process.argv[3] ?? input.replace(/\.md$/i, ".pdf"));
 
+// Step 2: find an installed Chrome or Edge (CHROME_PATH first, then the usual install folders).
 const browser = [
   process.env.CHROME_PATH,
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -46,6 +54,8 @@ const markdown = readFileSync(input, "utf8").replace(/(!\[[^\]]*\]\()([^)\s]+)(\
   if (/^[a-z]+:/i.test(src) || !type || !existsSync(file)) return whole;
   return `${open}data:${type};base64,${readFileSync(file).toString("base64")}${close}`;
 });
+// Step 3: build one HTML page: print styles, the Markdown text, and a small script that turns the
+// Markdown into HTML (marked) and draws the diagrams (mermaid) inside the browser.
 const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">${base}<title>${basename(input, ".md")}</title>
 <style>
@@ -90,6 +100,8 @@ const html = `<!doctype html>
   document.title = "rendered";
 </script></body></html>`;
 
+// Step 4: save the page in a temporary folder, ask the headless browser to print it to PDF, and always
+// delete the temporary folder afterwards.
 const dir = mkdtempSync(join(tmpdir(), "md-to-pdf-"));
 const page = join(dir, "page.html");
 writeFileSync(page, html);

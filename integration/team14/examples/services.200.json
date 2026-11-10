@@ -1,36 +1,23 @@
-{
-  "services": [
-    {
-      "id": "689dfeea-2a43-4aa9-87b4-55cfacaf29bc",
-      "slug": "counselling",
-      "name": "Counselling",
-      "whatFor": "Talking through stress, low mood, anxiety, relationships, grief, or anything that is weighing on you. You do not need a diagnosis or a 'big enough' problem.",
-      "firstSession": "A relaxed 50-minute conversation with a counsellor about what is going on and what might help. Nothing is decided for you.",
-      "whoWillKnow": "Only the counsellors of this service. Not your lecturers, not your parents, not other students."
-    },
-    {
-      "id": "e82330e2-747f-42ce-831c-a0fe844036f3",
-      "slug": "health-clinic",
-      "name": "Health clinic",
-      "whatFor": "Everyday physical health: vaccinations and flu shots, feeling unwell, minor injuries, medical certificates, and general health questions.",
-      "firstSession": "A 15 to 20 minute visit with a campus nurse. Bring your student ID.",
-      "whoWillKnow": "Only the nurses of the health clinic."
-    },
-    {
-      "id": "e9af0c7e-88a8-4452-8036-7c34db284db8",
-      "slug": "physiotherapy",
-      "name": "Physiotherapy",
-      "whatFor": "Aches, sports injuries, back and neck pain from study, and recovery after an injury.",
-      "firstSession": "A 30-minute assessment of the problem area and a first set of exercises.",
-      "whoWillKnow": "Only the physiotherapists of this service."
-    },
-    {
-      "id": "6c940476-f362-4090-b96a-40d75ed2564b",
-      "slug": "wellbeing-advising",
-      "name": "Wellbeing advising",
-      "whatFor": "Practical help with sleep, study-life balance, money worries, settling in, and finding the right support on or off campus.",
-      "firstSession": "A 30-minute chat with a wellbeing officer to map out what would make things easier.",
-      "whoWillKnow": "Only the wellbeing officers of this service."
-    }
-  ]
-}
+[
+  {
+    "id": "srv_academic_stress",
+    "name": "Academic Stress Counselling",
+    "description": "Talk through exam pressure, deadlines, study worries or feeling behind.",
+    "duration_minutes": 45,
+    "is_active": true
+  },
+  {
+    "id": "srv_general_counselling",
+    "name": "General Counselling",
+    "description": "Anything weighing on you: low mood, anxiety, relationships, family or grief. No problem is too small.",
+    "duration_minutes": 45,
+    "is_active": true
+  },
+  {
+    "id": "srv_urgent_drop_in",
+    "name": "Urgent Drop-in",
+    "description": "A shorter, sooner conversation when something can't wait. In an emergency, call the emergency numbers instead.",
+    "duration_minutes": 30,
+    "is_active": true
+  }
+]

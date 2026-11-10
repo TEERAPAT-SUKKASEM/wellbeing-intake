@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Wellbeing (Team 16) — public API for Team 14",
-    "description": "Contract: Team14-Integration-Contract.md. Public, no authentication. Call from your server: no CORS headers are sent.",
+    "name": "Wellbeing (Team 16) — public API for Team 14 (contract 2.0)",
+    "description": "Contract: Team14-Integration-Contract.md, version 2.0. Public, no authentication. Call from your server: no CORS headers are sent.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -11,7 +11,7 @@
     },
     {
       "key": "correlationId",
-      "value": "team14-a5-0001"
+      "value": "team14-v2-0001"
     }
   ],
   "item": [
@@ -34,7 +34,7 @@
             "services"
           ]
         },
-        "description": "The whole catalogue. Store `slug` on your ticket, never `id` (ids change when Wellbeing reseeds)."
+        "description": "The whole catalogue, as a plain JSON array. Store `id` on your ticket (e.g. srv_academic_stress); it never changes."
       },
       "event": [
         {
@@ -44,8 +44,10 @@
             "exec": [
               "pm.test(\"200\", () => pm.response.to.have.status(200));",
               "pm.test(\"correlation id echoed\", () => pm.expect(pm.response.headers.get(\"X-Correlation-Id\")).to.eql(pm.collectionVariables.get(\"correlationId\")));",
-              "const slugs = pm.response.json().services.map(s => s.slug).sort();",
-              "pm.test(\"four stable slugs\", () => pm.expect(slugs).to.eql([\"counselling\",\"health-clinic\",\"physiotherapy\",\"wellbeing-advising\"]));"
+              "const body = pm.response.json();",
+              "pm.test(\"a plain non-empty array\", () => pm.expect(body).to.be.an(\"array\").that.is.not.empty);",
+              "pm.test(\"only the known stable ids\", () => body.forEach(s => pm.expect([\"srv_academic_stress\",\"srv_general_counselling\",\"srv_urgent_drop_in\"]).to.include(s.id)));",
+              "pm.test(\"contract fields present\", () => body.forEach(s => { pm.expect(s.name).to.be.a(\"string\"); pm.expect(s.description).to.be.a(\"string\"); pm.expect(s.duration_minutes).to.be.a(\"number\"); pm.expect(s.is_active).to.eql(true); }));"
             ]
           }
         }
@@ -85,7 +87,7 @@
       ]
     },
     {
-      "name": "3 Protected endpoint without a token (outside this contract)",
+      "name": "3 Staff-only endpoint without signing in (outside this contract)",
       "request": {
         "method": "GET",
         "header": [
@@ -95,13 +97,13 @@
           }
         ],
         "url": {
-          "raw": "{{baseUrl}}/requests/me",
+          "raw": "{{baseUrl}}/practitioner/queue",
           "host": [
             "{{baseUrl}}"
           ],
           "path": [
-            "requests",
-            "me"
+            "practitioner",
+            "queue"
           ]
         },
         "description": "Shown only to demonstrate an authentication failure. Student data is never shared with Helpdesk."
@@ -139,7 +141,7 @@
             "dentistry"
           ]
         },
-        "description": "There is no by-slug endpoint: fetch the list and match on `slug`."
+        "description": "There is no by-id endpoint: fetch the list and match on `id`."
       },
       "event": [
         {

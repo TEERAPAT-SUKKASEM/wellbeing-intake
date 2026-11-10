@@ -1,3 +1,8 @@
+// What this test file does: it tests rules that cover the whole platform: health check, correlation ids,
+// private logs, locked database access, rate limits, staff sessions, machine-only routes and webhooks.
+// Why it matters: these protect the PRD's "privacy-first" promise: student text never reaches logs, the
+// public browser key reads nothing, key guessing is limited, and webhooks must be signed.
+// How to run it: `pnpm test:integration` (needs the local Supabase database from `pnpm db:start`).
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -15,6 +20,8 @@ import { POST as inboundWebhook } from "@/app/api/v1/webhooks/notification-hub/r
 import { EVENT_ID_HEADER, SIGNATURE_HEADER, TIMESTAMP_HEADER, sign } from "@/lib/events/contract";
 import { BASE, PASSWORD, USERS, admin, anon, book, call, captureLogs, nextFreeSlot, requestBody, submit } from "./helpers";
 
+// General rules: a health check with no private data, a correlation id on every answer, no tracking
+// packages, and emergency contacts that are fixed in the code.
 describe("Platform conventions", () => {
   it("health is public and content-free", async () => {
     const r = await call(health, { path: "/health" });
@@ -45,6 +52,7 @@ describe("Platform conventions", () => {
   });
 });
 
+// Student text and access keys never reach the logs, and the public (anon) database key can read nothing.
 describe("Privacy", () => {
   it("a sentinel in the note and alias appears in no log line and no error", async () => {
     const sentinel = `SENTINEL${randomUUID().replaceAll("-", "")}`;
@@ -82,6 +90,7 @@ describe("Privacy", () => {
   });
 });
 
+// Per-address and per-hour limits (429) stop mass booking, access-key guessing and AI-check abuse.
 describe("Abuse limits", () => {
   const address = (label: string) => `203.0.113.${label}`;
 
@@ -143,6 +152,7 @@ describe("Abuse limits", () => {
   });
 });
 
+// Staff sign in with a protected cookie; writes from other websites (CSRF) and non-staff are refused.
 describe("Staff sessions", () => {
   async function cookieSession() {
     const r = await signIn(
@@ -220,6 +230,7 @@ describe("Staff sessions", () => {
   });
 });
 
+// The webhook dispatcher route accepts only the machine token (DISPATCH_TOKEN), not a staff login.
 describe("Machine routes", () => {
   it("the dispatcher accepts only the machine credential", async () => {
     const none = await call(dispatchRoute, { method: "POST", path: "/internal/events/dispatch" });
@@ -231,6 +242,7 @@ describe("Machine routes", () => {
   });
 });
 
+// The built-in fake Hub (for development) is off by default, and checks the signature and body when on.
 describe("Mock Notification Hub", () => {
   const event = { event_type: "appointment.confirmed", appointment_id: "req_abc", scheduled_time: "2026-11-10T03:00:00Z", privacy_buffer_end: "2026-11-10T04:00:00Z" };
   function delivery(body: unknown, secret = process.env.HUB_SIGNING_SECRET!) {
@@ -274,6 +286,7 @@ describe("Mock Notification Hub", () => {
   });
 });
 
+// Receipts from the Hub must be correctly signed, and a repeated eventId is stored only once.
 describe("Inbound webhook receiver", () => {
   function signedRequest(body: Record<string, unknown>, opts: { secret?: string; tamper?: boolean } = {}) {
     const raw = JSON.stringify(body);

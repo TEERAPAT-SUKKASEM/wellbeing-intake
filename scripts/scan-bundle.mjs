@@ -1,3 +1,9 @@
+// What this script does: after a production build, it searches every file a browser can download for
+// server secrets: the real values of secret environment variables, and forbidden names like "service_role".
+// Why it matters: a "secret in the client bundle" means a private key was copied into the JavaScript or
+// HTML that is sent to every visitor, where anyone could read it. CI fails the build if this happens.
+// How to run it: `pnpm build` first, then `pnpm scan:bundle`.
+//
 // Fail if any server secret reached what the browser can download.
 // Run after `pnpm build`. Two roots:
 //   .next/static      — client JS/CSS: secret VALUES and forbidden NAMES are both checked
@@ -9,9 +15,11 @@ import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "dotenv";
 
+// Load the real secret values from .env.local, then .env, so we know exactly what to search for.
 config({ path: ".env.local" });
 config({ path: ".env" });
 
+// Server-only secrets. None of their values may ever appear in browser files.
 const SECRET_VARS = [
   "SUPABASE_SERVICE_ROLE_KEY",
   "HUB_SIGNING_SECRET",
@@ -24,6 +32,7 @@ const SECRET_VARS = [
 // Names that must never appear in client code even when the value is unknown at scan time.
 const FORBIDDEN_NAMES = ["SUPABASE_SERVICE_ROLE_KEY", "service_role"];
 
+// The build output folders to scan. The build must exist first.
 const STATIC_ROOT = ".next/static";
 const roots = [STATIC_ROOT, ".next/server/app", ".next/server/pages"].filter(existsSync);
 if (!existsSync(STATIC_ROOT)) {
@@ -31,6 +40,7 @@ if (!existsSync(STATIC_ROOT)) {
   process.exit(1);
 }
 
+// Lists every file inside a folder, including all sub-folders.
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
@@ -39,10 +49,13 @@ function* walk(dir) {
   }
 }
 
+// Keep only secrets that are set and at least 8 characters long; very short values would match by chance.
 const secrets = SECRET_VARS.map((name) => ({ name, value: process.env[name] })).filter((s) => s.value && s.value.length >= 8);
 const findings = [];
 let scanned = 0;
 
+// Read each browser file and record every secret value it contains. In the client JS/CSS folder,
+// also record any forbidden name.
 for (const root of roots) {
   const isStatic = root === STATIC_ROOT;
   for (const file of walk(root)) {
@@ -58,6 +71,7 @@ for (const root of roots) {
   }
 }
 
+// Any finding prints the file names and exits with code 1, which fails CI.
 if (findings.length) {
   console.error("Secret material found in the client bundle:\n" + findings.join("\n"));
   process.exit(1);
