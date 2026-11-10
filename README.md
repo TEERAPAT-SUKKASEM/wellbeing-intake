@@ -75,7 +75,7 @@ default there, because anyone can post a note and staff logins can read notes.
 | --- | --- |
 | `pnpm test` | Unit: slot and buffer rules, access keys, urgency rule, AI path with the network stubbed, webhook contract |
 | `pnpm test:integration` | Real route handlers against the local database, including the PRD's `TEST-01` to `TEST-07`. Reseeds first. |
-| `pnpm eval:ai` | The urgency rule on the 12-case golden set (`eval/eval-cases.json`), with no key or network |
+| `pnpm eval:ai` | The urgency rule on the 15-case golden set (`eval/eval-cases.json`), with no key or network |
 | `pnpm eval:ai:live` | The same set against the real model. Run by hand; needs a key in `.env.vercel` |
 | `pnpm typecheck`, `pnpm lint` | Types and lint |
 | `pnpm check:openapi` | Every implemented route is in `openapi.yaml`, and vice versa |
