@@ -20,6 +20,7 @@
     "check:openapi": "node scripts/check-openapi.mjs",
     "eval:ai": "tsx scripts/run-ai-eval.ts",
     "eval:ai:live": "tsx --conditions=react-server --env-file=.env.vercel scripts/eval-ai-live.ts",
+    "eval:matcher:live": "tsx --conditions=react-server --env-file=.env.vercel scripts/eval-matcher-live.ts",
     "docs:pdf": "node scripts/md-to-pdf.mjs"
   },
   "dependencies": {
