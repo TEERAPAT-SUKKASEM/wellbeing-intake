@@ -5,7 +5,7 @@
 // Key idea: URGENT wins. A request is URGENT if the AI, a crisis phrase, OR the student says so.
 import "server-only";
 import { env } from "@/lib/env";
-import { CANNOT_HELP_NOW, EMERGENCY_CONTACTS } from "@/lib/emergency";
+import { CANNOT_HELP_NOW, EMERGENCY_CONTACTS, type EmergencyContact } from "@/lib/emergency";
 import { db } from "@/lib/supabase/admin";
 import { assessWithAi } from "@/lib/urgency/ai";
 import { hasPromptInjection, hasUrgentCue, type Urgency } from "@/lib/urgency/keywords";
@@ -71,12 +71,16 @@ export async function assessUrgency(input: {
 const ROUTINE_DISCLAIMER =
   "This app books appointments. It cannot provide emergency help. If you or someone else is in danger, please contact one of these numbers now.";
 
-/** Fixed wording only: nothing a model wrote is ever shown to a student. */
-export function guidanceFor(urgency: Urgency) {
+/**
+ * Fixed wording only: nothing a model wrote is ever shown to a student. `contacts` defaults to the
+ * hard-coded list; the routes pass the list from emergencyContactsFor() (src/lib/partners/helpdesk.ts),
+ * so Team 14's official campus numbers can replace our placeholders.
+ */
+export function guidanceFor(urgency: Urgency, contacts: readonly EmergencyContact[] = EMERGENCY_CONTACTS) {
   // The same emergency numbers are shown for both levels. A tel: link lets a phone dial the number.
   return {
     disclaimer: urgency === "URGENT" ? CANNOT_HELP_NOW : ROUTINE_DISCLAIMER,
-    emergency_links: EMERGENCY_CONTACTS.map((contact) => ({
+    emergency_links: contacts.map((contact) => ({
       name: contact.name,
       detail: contact.detail,
       phone: contact.phone,

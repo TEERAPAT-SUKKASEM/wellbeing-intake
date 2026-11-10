@@ -143,6 +143,14 @@ export const env = {
     return number("AI_TIMEOUT_MS", 3000);
   },
 
+  /**
+   * Partner integration: Team 14's Helpdesk API base URL, e.g. https://<host>/api/v1. We read their
+   * public campus contacts list. Empty = off: no call is made and the hard-coded numbers are used.
+   */
+  get helpdeskApiBaseUrl() {
+    return optional("HELPDESK_API_BASE_URL");
+  },
+
   /** Turns on the built-in fake Notification Hub at /api/v1/mock/hub, for tests and demos. */
   get mockHubEnabled() {
     return optional("MOCK_HUB_ENABLED", "false") === "true";

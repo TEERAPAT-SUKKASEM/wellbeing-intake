@@ -737,6 +737,9 @@ components:
       required: [disclaimer, emergency_links]
       properties:
         disclaimer: { type: string, description: "Fixed wording. Nothing a model wrote ever appears here." }
+        # The two campus entries in emergency_links may come from Team 14 Helpdesk GET /contacts, labelled
+        # "(demo)" while unverified. On any Helpdesk problem the built-in numbers are used. 1669 and 1323
+        # are always built in.
         emergency_links:
           type: array
           items:

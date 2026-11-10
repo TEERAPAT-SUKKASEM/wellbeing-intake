@@ -15,6 +15,8 @@ import type { RequestRow } from "@/lib/requests";
 import { checkRequestedSlot, listSlots, readActiveService } from "@/lib/slots/calendar";
 import { campusDateOf, toIso } from "@/lib/slots/grid";
 import { db } from "@/lib/supabase/admin";
+import type { EmergencyContact } from "@/lib/emergency";
+import { emergencyContactsFor } from "@/lib/partners/helpdesk";
 import { assessUrgency, guidanceFor, logTriage } from "@/lib/urgency/assess";
 
 // PRD 3: submit an anonymous request. No sign-in, and `.strict()` means the body cannot carry an email,
@@ -43,7 +45,8 @@ type CreateResult =
 
 // Builds the reply the student sees after submitting: the access key, the status, the times including
 // the privacy buffer end, and fixed safety wording (disclaimer and emergency phone links) for the urgency.
-function accepted(status: number, request: RequestRow, accessKey: string) {
+// `contacts` is the emergency list from emergencyContactsFor(): ours, with Helpdesk's campus numbers.
+function accepted(status: number, request: RequestRow, accessKey: string, contacts: readonly EmergencyContact[]) {
   return {
     status,
     json: {
@@ -55,7 +58,7 @@ function accepted(status: number, request: RequestRow, accessKey: string) {
       requested_slot_start: toIso(request.slot_start),
       requested_slot_end: toIso(request.slot_end),
       privacy_buffer_end: toIso(request.buffer_end),
-      ...guidanceFor(request.urgency_level),
+      ...guidanceFor(request.urgency_level, contacts),
     },
   };
 }
@@ -87,7 +90,7 @@ export const POST = route({
         .eq("submission_key", submissionKey)
         .maybeSingle();
       if (existing.error) throw new Error("read_failed");
-      if (existing.data) return accepted(200, existing.data as RequestRow, accessKey);
+      if (existing.data) return accepted(200, existing.data as RequestRow, accessKey, await emergencyContactsFor(cid));
     }
 
     // The service must exist and be active. Here an unknown service is a 400 on the service_id field,
@@ -153,6 +156,6 @@ export const POST = route({
 
     // created is false when the database found this Idempotency-Key already saved (two copies of the
     // same submit raced each other). Then it is the same request, so the answer is 200, not 201.
-    return accepted(result.created ? 201 : 200, result.request, accessKey);
+    return accepted(result.created ? 201 : 200, result.request, accessKey, await emergencyContactsFor(cid));
   },
 });
