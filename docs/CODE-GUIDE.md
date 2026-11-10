@@ -325,9 +325,16 @@ delivered on the first try.
   pause, then resends any waiting webhooks.
 - **Seed safety:** `pnpm seed` wipes and reloads demo data, so it **refuses** any non-local database unless
   you type `--confirm-remote=<exact host>`, and a hosted database also needs a private password.
-- **Partner integration:** Team 14 (Helpdesk) reads our public `GET /services` (contract 2.0 in
-  `integration/team14/`). Their calls `team14-v2-0001`, `-0003`, `-0005` and `-0006` were seen in our
-  logs on 2026-11-10.
+- **Partner integration with Team 14 (Helpdesk), in both directions:**
+  - **Helpdesk → us:** they read our public `GET /services` (contract 2.0 in `integration/team14/`).
+    Their calls `team14-v2-0001`, `-0003`, `-0005` and `-0006` were seen in our logs on 2026-11-10.
+  - **Us → Helpdesk:** we read their public `GET /api/v1/contacts` (campus security, counselling front
+    desk) in `src/lib/partners/helpdesk.ts`. Their numbers replace our two placeholders in the emergency
+    links of the booking receipt and the AI check, shown as "(demo)" while unverified. It is switched on
+    by the `HELPDESK_API_BASE_URL` setting. It waits at most 3 seconds and caches for 5 minutes, and on
+    any problem we show our hard-coded numbers. The national hotlines 1669 and 1323 are never replaced.
+    Every call writes a log line with `"kind":"partner"` and a `team16-…` correlation id that also
+    appears in Helpdesk's logs.
 
 ---
 
@@ -397,31 +404,35 @@ delivered on the first try.
     ignored.
 25. **Can the webhook leak student data?** No. The payload is exactly four fields, enforced by a strict
     schema and by the database.
-26. **Who is your partner team?** Team 14 (Helpdesk). They read our public service list to suggest
-    Wellbeing on helpdesk tickets. They never receive any student data.
+26. **Who is your partner team?** Team 14 (Helpdesk), connected both ways. They read our public service
+    list to suggest Wellbeing on helpdesk tickets. We read their campus contact list to show official
+    campus numbers in our safety guidance (`src/lib/partners/helpdesk.ts`). No student data goes either
+    way.
+27. **What if Helpdesk is down?** Our client waits at most 3 seconds, uses its cached copy, and otherwise
+    shows our hard-coded numbers. A student always sees emergency numbers, and booking never waits on it.
 
 **Frontend**
 
-27. **Why isn't the key in the URL?** URLs end up in browser history and server logs. We pass it in
+28. **Why isn't the key in the URL?** URLs end up in browser history and server logs. We pass it in
     memory and send it in a header. We also set `Referrer-Policy: no-referrer`.
-28. **Where is the buffer shown?** Students see only "Available"/"Unavailable"; practitioners see a
+29. **Where is the buffer shown?** Students see only "Available"/"Unavailable"; practitioners see a
     separate "Privacy buffer" block after each session on the schedule.
-29. **What did you do for accessibility?** A skip link, labels on every input, keyboard tabs and time
+30. **What did you do for accessibility?** A skip link, labels on every input, keyboard tabs and time
     wheels, native dialogs that keep focus, `aria-live` updates, large click targets, and support for
     high contrast and reduced motion. Automated axe checks found 0 violations.
-30. **What is preview mode?** A development-only fake student API so screens could be built without a
+31. **What is preview mode?** A development-only fake student API so screens could be built without a
     database. It needs both `NODE_ENV=development` and `UI_PREVIEW=true`, so it can never run in
     production.
 
 **Testing and DevOps**
 
-31. **How do you test the AI failing without a real AI?** A tiny fake AI server on `127.0.0.1` returns
+32. **How do you test the AI failing without a real AI?** A tiny fake AI server on `127.0.0.1` returns
     errors; the test proves booking still works.
-32. **What does CI check?** Lint, types, the API contract, unit tests, the AI rule gate, integration tests
+33. **What does CI check?** Lint, types, the API contract, unit tests, the AI rule gate, integration tests
     on a real database, the production build, and a secret scan. A red check blocks the merge.
-33. **Could the seed script wipe production?** Not by accident: it refuses any non-local database unless
+34. **Could the seed script wipe production?** Not by accident: it refuses any non-local database unless
     you type the exact host, and a tested guard rejects look-alike hosts.
-34. **Why is there a job every 3 hours?** The free database pauses after a week without use; the job keeps
+35. **Why is there a job every 3 hours?** The free database pauses after a week without use; the job keeps
     it awake and resends any waiting webhooks.
 
 ---

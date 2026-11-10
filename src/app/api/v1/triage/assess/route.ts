@@ -8,6 +8,7 @@ import { z } from "zod";
 import { env } from "@/lib/env";
 import { HttpError, route } from "@/lib/http";
 import { addHit, clientAddress, isLimited } from "@/lib/rate-limit";
+import { emergencyContactsFor } from "@/lib/partners/helpdesk";
 import { assessUrgency, guidanceFor, logTriage } from "@/lib/urgency/assess";
 
 // Added to the PRD: Screen 2's AI widget has to show a suggestion before the form is submitted.
@@ -40,7 +41,7 @@ export const POST = route({
       json: {
         urgency_level: result.urgency_level,
         triage_mode: result.triage_mode,
-        ...guidanceFor(result.urgency_level),
+        ...guidanceFor(result.urgency_level, await emergencyContactsFor(cid)),
       },
     };
   },
