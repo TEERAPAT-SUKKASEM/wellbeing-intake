@@ -1,7 +1,0 @@
-# A5 raw capture — https://wellbeing-intake.vercel.app — deploy 818596e
-# Captured 2026-09-20T23:09:24Z. AI_FINDER_ENABLED=false on the deployment.
-
-POST /api/v1/finder/suggest  {"text":"trouble sleeping before exams"}
-HTTP/1.1 200 OK
-X-Correlation-Id: a5-6b-fallback
-{"mode":"fallback","serviceIds":["6c940476-f362-4090-b96a-40d75ed2564b"]}

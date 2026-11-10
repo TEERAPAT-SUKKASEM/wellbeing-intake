@@ -1,5 +1,5 @@
 // Renders a Markdown file (GitHub-style, with mermaid diagrams) to PDF using headless Chrome/Edge.
-// Usage: node scripts/md-to-pdf.mjs docs/A3-Team16-Data-and-Query-Design.md
+// Usage: node scripts/md-to-pdf.mjs docs/PRD.md   (any Markdown file; writes the PDF next to it)
 // Needs internet once per run: marked and mermaid are loaded from the jsDelivr CDN.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
