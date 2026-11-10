@@ -348,7 +348,6 @@ html { scroll-padding-top: 140px; }
 .matcher-form > .matcher-meta, .matcher-form > .matcher-preview { font-size: 13px; }
 .matcher-consent { display: flex; gap: 12px; align-items: start; min-height: 44px; }
 .matcher-consent input { flex-shrink: 0; margin-top: 3px; }
-<<<<<<< HEAD
 .matcher-feedback { margin-top: 8px; padding: 20px; border: 1px solid var(--color-base-300); border-radius: 0; background: var(--color-base-100); color: var(--text-muted); text-align: start; }
 .matcher-feedback .matcher-feedback-title { margin: 0 0 6px; color: var(--color-base-content); font-size: 18px; font-weight: 700; line-height: 1.4; }
 .matcher-feedback-matched { border-color: color-mix(in srgb, var(--color-success) 35%, var(--color-base-100)); background: var(--color-secondary); }
@@ -369,12 +368,6 @@ html { scroll-padding-top: 140px; }
   .matcher-feedback { padding: 16px; }
   .matcher-results .matcher-service-action { width: 100%; }
 }
-=======
-.matcher-results { display: grid; gap: 16px; margin: 16px 0; }
-.matcher-results a { display: inline-flex; align-items: center; min-height: 44px; }
-.matcher-feedback { padding-top: 16px; }
-/* --- Section: emergency contacts notice --- */
->>>>>>> origin/main
 .emergency-notice {
   display: flex;
   align-items: center;
@@ -515,16 +508,9 @@ html { scroll-padding-top: 140px; }
 }
 .optional-assessment { border-top: 1px solid var(--color-base-300); padding-top: 16px; }
 .optional-assessment > summary { min-height: 44px; padding: 10px 0; font-size: 15px; font-weight: 600; }
-<<<<<<< HEAD
 .appointment-date-picker { min-width: 0; padding: 16px; border: 1px solid var(--control-edge); border-radius: 0; }
 .service-back-link { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: #51564e; font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 5px; }
 .service-back-link:hover { color: #20211f; text-decoration-thickness: 2px; }
-=======
-.appointment-date-picker { min-width: 0; padding: 16px; border: 1px solid var(--control-edge); border-radius: 16px; }
-.service-back-link { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; color: #435e80; font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 5px; }
-.service-back-link:hover { color: #203b64; text-decoration-thickness: 2px; }
-/* --- Section: administrator workspace: list of services to edit --- */
->>>>>>> origin/main
 .admin-service-list { margin: 0; padding: 0; list-style: none; }
 .admin-service-list > li + li { border-top: 1px solid var(--color-base-300); }
 .admin-service-toggle { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%; min-height: 76px; padding: 18px 8px; text-align: left; color: var(--color-base-content); font-size: 17px; font-weight: 600; border-radius: 0; cursor: pointer; }
@@ -574,12 +560,7 @@ html { scroll-padding-top: 140px; }
   .opening-window-row > .scrolling-time-picker:first-of-type { grid-column: 2; }
   .opening-window-remove { grid-column: 2 / -1; justify-self: start; min-height: 44px; }
 }
-<<<<<<< HEAD
 .tracked-request-card { padding: 28px; gap: 24px; border-radius: 0; overflow-wrap: anywhere; }
-=======
-/* --- Section: request status card that a student sees after entering the access key --- */
-.tracked-request-card { padding: 28px; gap: 24px; border-radius: 20px; overflow-wrap: anywhere; }
->>>>>>> origin/main
 .tracked-request-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .tracked-request-header h2 { flex: 1 1 240px; font-size: 24px; font-weight: 700; line-height: 1.35; }
 .tracked-request-status { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 0; background: #f8eddb; color: #76501c; font-size: 13px; font-weight: 600; }
@@ -982,12 +963,7 @@ html { scroll-padding-top: 140px; }
 .slot-unavailable { background: #eeede7; color: #595b55; border-style: dashed; }
 .slot-unavailable input { opacity: 1; }
 .slot-option .text-xs { font-size: 13px; }
-<<<<<<< HEAD
 .btn:not(:disabled):active { box-shadow: none; }
-=======
-.btn:not(:disabled):active { box-shadow: var(--soft-inset); }
-/* --- Section: service cards on smaller screens --- */
->>>>>>> origin/main
 @media (max-width: 900px) {
   .service-row { min-height: 220px; }
 }
@@ -1031,7 +1007,6 @@ html { scroll-padding-top: 140px; }
   .bento-tracking { grid-column: 1; grid-row: 3; padding: 24px; }
   .bento-services .service-matcher { padding: 14px 20px; }
 }
-<<<<<<< HEAD
 .schedule-month-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 .practitioner-booking-dialog { padding: 16px; }
 .practitioner-booking-dialog .practitioner-booking-panel { width: min(760px, calc(100vw - 32px)); max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); padding: 28px; overflow-y: auto; overscroll-behavior: contain; }
@@ -1141,9 +1116,6 @@ html { scroll-padding-top: 140px; }
   .bento-tracking { padding: 24px 0 0; }
   .bento-services .service-matcher { padding: 8px 16px; }
 }
-=======
-/* --- Section: accessibility: Windows high-contrast mode, then reduced motion --- */
->>>>>>> origin/main
 @media (forced-colors: active) {
   .card, .service-row { border: 1px solid CanvasText; box-shadow: none; }
   .btn, .input, .textarea, .select, .slot-option { border: 1px solid ButtonText; box-shadow: none; }

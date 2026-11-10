@@ -1,14 +1,4 @@
-<<<<<<< HEAD
 export function UiIcon({ name, className = "size-5" }: { name: "talk" | "health" | "movement" | "wellbeing" | "arrow" | "close" | "shield" | "phone" | "grid" | "calendar" | "chevron" | "sign-in" | "sign-out" | "key" | "status" | "refresh"; className?: string }) {
-=======
-// What this component shows: one small line icon (an SVG), chosen by its name, e.g. "calendar" or "phone".
-// Used on: most pages: the site header, home, booking, tracking, emergency, sign-in and admin pages.
-// Talks to: no API calls.
-// Note: the icon has aria-hidden="true", so screen readers skip it. The text next to it gives the meaning.
-// The icons use stroke="currentColor", so they take the text colour of the element around them.
-export function UiIcon({ name, className = "size-5" }: { name: "talk" | "health" | "movement" | "wellbeing" | "arrow" | "close" | "shield" | "phone" | "grid" | "calendar" | "chevron" | "sign-in" | "sign-out" | "key" | "status"; className?: string }) {
-  // Each line below draws one icon. Only the line whose name matches is rendered.
->>>>>>> origin/main
   return <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     {name === "talk" && <><path d="M20 11a8 8 0 0 1-8 8H5l-3 3V11a9 9 0 0 1 18 0Z" /><path d="M7 10h8m-8 4h5" /></>}
     {name === "health" && <><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 7v10M7 12h10" /></>}

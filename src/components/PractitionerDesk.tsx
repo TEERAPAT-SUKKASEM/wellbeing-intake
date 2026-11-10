@@ -42,15 +42,10 @@ export function PractitionerDesk() {
   const today = useCampusToday();
   const [chosenDate, setDate] = useState("");
   const date = chosenDate || today;
-<<<<<<< HEAD
   const [view, setView] = useState("day");
   const days = view === "day" ? 1 : 7;
   const rangeStart = date ? view === "month" ? scheduleMonth(date).start : date : "";
   const rangeEnd = date ? view === "month" ? scheduleMonth(date).end : addDays(date, days - 1) : "";
-=======
-  const [days, setDays] = useState(7);
-  // loading and error: status of the data load. refresh: a counter; adding 1 loads the data again.
->>>>>>> origin/main
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
@@ -61,11 +56,7 @@ export function PractitionerDesk() {
   const [slot, setSlot] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-<<<<<<< HEAD
   const [messageTone, setMessageTone] = useState<"success" | "danger">("success");
-=======
-  // decision: what the confirmation dialog will send: a new status, plus a new time when rescheduling.
->>>>>>> origin/main
   const [decision, setDecision] = useState<{
     status: RequestStatus;
     slot?: string;
@@ -117,7 +108,6 @@ export function PractitionerDesk() {
     return () => {
       alive = false;
     };
-<<<<<<< HEAD
   }, [rangeStart, rangeEnd, refresh, router]);
   function selectDate(next: string) {
     if (next === date) return;
@@ -126,10 +116,6 @@ export function PractitionerDesk() {
     setSelected(null);
     if (changesRange) setLoading(true);
   }
-=======
-  }, [date, days, refresh, router]);
-  // Close the detail panel and load fresh data.
->>>>>>> origin/main
   function reload() {
     setSelected(null);
     setLoading(true);
@@ -430,7 +416,6 @@ export function PractitionerDesk() {
           </>
         )
       )}
-<<<<<<< HEAD
       <dialog
         ref={detail}
         id="practitioner-booking"
@@ -449,18 +434,6 @@ export function PractitionerDesk() {
         {selected && <div className="modal-box practitioner-booking-panel space-y-5">
           <div className="booking-dialog-heading">
           <h2 id="detail-title" className="text-2xl font-semibold" tabIndex={-1} autoFocus>
-=======
-      {/* Detail panel of the chosen request. It shows the private note; "Hide private note" closes it. */}
-      {/* Approve and Reject appear only for Pending requests. Reschedule and Cancel are always shown. */}
-      {selected && (
-        <section
-          ref={detail}
-          tabIndex={-1}
-          className="card card-border gap-4 p-5 sm:p-6"
-          aria-labelledby="detail-title"
-        >
-          <h2 id="detail-title" className="text-2xl font-semibold">
->>>>>>> origin/main
             {selected.alias || "Anonymous request"}
           </h2>
           <form method="dialog"><button className="btn btn-ghost btn-square" aria-label="Close booking details" disabled={busy}><UiIcon name="close" /></button></form>
@@ -534,7 +507,6 @@ export function PractitionerDesk() {
               </button>
             </div>
           )}
-<<<<<<< HEAD
           <div className="booking-danger-actions">
             <p>Rejection or cancellation releases the reserved time.</p>
             <div className="flex flex-wrap gap-3">
@@ -544,12 +516,6 @@ export function PractitionerDesk() {
           </div>
         </div>}
       </dialog>
-=======
-        </section>
-      )}
-      {/* Confirmation dialog for every decision. Its title and text depend on the decision. */}
-      {/* While saving, the buttons are disabled and Escape cannot close it (onCancel). */}
->>>>>>> origin/main
       <dialog
         ref={dialog}
         className="modal"
