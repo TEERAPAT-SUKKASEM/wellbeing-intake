@@ -3,14 +3,15 @@
 // Talks to: no API calls.
 // Note: the icon has aria-hidden="true", so screen readers skip it. The text next to it gives the meaning.
 // The icons use stroke="currentColor", so they take the text colour of the element around them.
-export function UiIcon({ name, className = "size-5" }: { name: "talk" | "health" | "movement" | "wellbeing" | "arrow" | "close" | "shield" | "phone" | "grid" | "calendar" | "chevron" | "sign-in" | "sign-out" | "key" | "status"; className?: string }) {
   // Each line below draws one icon. Only the line whose name matches is rendered.
+export function UiIcon({ name, className = "size-5" }: { name: "talk" | "health" | "movement" | "wellbeing" | "arrow" | "close" | "shield" | "phone" | "grid" | "calendar" | "chevron" | "sign-in" | "sign-out" | "key" | "status" | "refresh"; className?: string }) {
   return <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     {name === "talk" && <><path d="M20 11a8 8 0 0 1-8 8H5l-3 3V11a9 9 0 0 1 18 0Z" /><path d="M7 10h8m-8 4h5" /></>}
     {name === "health" && <><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 7v10M7 12h10" /></>}
     {name === "movement" && <><circle cx="15" cy="4" r="2" /><path d="m12 9 4 3 4-1M5 11l5-3 3 7-4 6m4-6 5 5" /></>}
     {name === "wellbeing" && <><path d="M12 20v-7m0 4C5 17 3 12 4 6c6 0 9 4 8 11Zm0-4c0-6 3-9 8-9 1 5-2 9-8 9Z" /></>}
     {name === "arrow" && <path d="M5 12h14m-6-6 6 6-6 6" />}
+    {name === "refresh" && <><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6.1 7a7 7 0 0 1 11.55-1.65L20 8M4 16l2.35 2.65A7 7 0 0 0 17.9 17" /></>}
     {name === "status" && <><rect x="5" y="4" width="14" height="17" rx="2" /><rect x="9" y="2" width="6" height="4" rx="1" /><path d="m8 13 2 2 5-5M8 18h8" /></>}
     {name === "key" && <><circle cx="8" cy="8" r="4" /><path d="m11 11 9 9m-3-3 3-3m-6 0 3-3" /></>}
     {name === "close" && <path d="m6 6 12 12M6 18 18 6" />}

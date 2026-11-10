@@ -8,6 +8,7 @@
 // and the suggestion is only a help: every service stays available below.
 "use client";
 import Link from "next/link";
+import { UiIcon } from "./UiIcon";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client/api";
 import type { Service } from "@/lib/client/contracts";
@@ -92,9 +93,18 @@ export function ServiceMatcher({ services, preview = false }: { services: Servic
       <label className="matcher-consent"><input type="checkbox" className="checkbox" checked={consent} onChange={event => { invalidate(); setConsent(event.target.checked); }} /><span>I agree to send this description for service matching.</span></label>
       <div className="flex flex-wrap gap-3"><button className="btn" disabled={!consent || !text.trim() || busy} aria-busy={busy}>{busy ? "Finding a service…" : "Suggest a service"}</button><button type="button" className="btn btn-ghost" onClick={clear}>Clear description</button></div>
       <div aria-live="polite" aria-atomic="true">
-        {error && <p className="matcher-feedback">{error}</p>}
-        {result && <div className="matcher-feedback">
-          {result.urgentGuidance ? <p>This helper cannot provide immediate help. If you feel unsafe or need help now, use the emergency contacts. Do not wait for an appointment.</p> : result.matches.length ? <><p className="font-semibold">{result.mode === "AI_ASSISTED" ? "Suggested services" : preview ? "Preview suggestion — local word match" : "Suggested services — keyword fallback"}</p><ul className="matcher-results">{result.matches.map(({ service, reason }) => <li key={service.id}><Link className="link font-semibold" href={`/request/new?service=${encodeURIComponent(service.id)}`}>{service.name}</Link><p>{reason}</p></li>)}</ul><p>You choose whether to use the suggestion. All services remain available below.</p></> : <p>There isn’t a clear match. Browse the service descriptions below and choose what feels right for you.</p>}
+        {busy && <div className="matcher-feedback matcher-feedback-pending"><p className="matcher-feedback-title">Finding a service…</p><p>Looking for a service that fits your description.</p></div>}
+        {error && <div className="alert alert-vertical matcher-feedback matcher-feedback-warning"><div><p className="matcher-feedback-title">Suggestions unavailable</p><p>{error}</p></div></div>}
+        {result && <div className={`matcher-feedback ${result.urgentGuidance ? "matcher-feedback-urgent" : result.matches.length ? "matcher-feedback-matched" : "matcher-feedback-empty"}`}>
+          {result.urgentGuidance ? <><p className="matcher-feedback-title">Need help now?</p><p>This helper cannot provide immediate help. If you feel unsafe or need help now, use the emergency contacts. Do not wait for an appointment.</p><Link className="link matcher-emergency-link" href="/emergency">View emergency contacts</Link></> : result.matches.length ? <>
+            <p className="matcher-feedback-title">{result.matches.length === 1 ? "A service to consider" : "Services to consider"}</p>
+            <p className="matcher-feedback-method">{result.mode === "AI_ASSISTED" ? "AI-assisted suggestion" : preview ? "Preview suggestion — local word match" : "Suggested services — keyword fallback"}</p>
+            <ul className="matcher-results">{result.matches.map(({ service, reason }) => <li key={service.id}>
+              <div className="matcher-service-copy"><h3>{service.name}</h3><p>{reason}</p></div>
+              <Link className="btn btn-outline matcher-service-action" aria-label={`Choose a time for ${service.name}`} href={`/request/new?service=${encodeURIComponent(service.id)}`}>Choose a time<UiIcon name="arrow" className="size-5 shrink-0" /></Link>
+            </li>)}</ul>
+            <p className="matcher-feedback-note">You choose whether to use the suggestion. All services remain available below.</p>
+          </> : <><p className="matcher-feedback-title">No clear match yet</p><p>There isn’t a clear match. Browse the service descriptions below and choose what feels right for you.</p></>}
         </div>}
       </div>
     </form>

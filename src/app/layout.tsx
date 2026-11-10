@@ -17,12 +17,6 @@ const geistSans = localFont({
   weight: "100 900",
   display: "swap",
 });
-const headingFont = localFont({
-  src: "./fonts/manrope-latin.woff2",
-  variable: "--font-heading",
-  weight: "200 800",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "Campus Health & Wellbeing — private booking",
@@ -42,7 +36,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       lang="en"
       data-theme="light"
       data-scroll-behavior="smooth"
-      className={`${geistSans.variable} ${headingFont.variable} h-full antialiased`}
+      className={`${geistSans.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-base-200 text-base-content">
         <a
