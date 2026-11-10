@@ -1,3 +1,8 @@
+// What this script does: it sends every fictional description in eval/matcher-cases.json to the real AI
+// model and checks if it suggests the expected service (or emergency guidance), and how fast it answers.
+// Why it matters: it measures the real AI behind the optional service matcher, which CI cannot test.
+// The saved file eval/live-matcher-results.json is the record of the last full run.
+// How to run it: `pnpm eval:matcher:live` (needs LLM_API_KEY in .env.vercel; run by hand, never in CI).
 /**
  * One-off check of the real model on the service-matcher cases (eval/matcher-cases.json). The unit tests
  * cover the keyword path with no key and no network, so that they can gate CI; this covers what they
@@ -24,6 +29,7 @@ const RESULTS_PATH = "eval/live-matcher-results.json";
 type Case = { id: string; category: string; input: string; urgent: boolean; first: string | null };
 type Outcome = { path: "safety_phrase" | "attack_blocked" | "ai" | "ai_failed"; urgent: boolean; picks: Recommendation[]; ms: number };
 
+// Read the optional --only=<case id> and --runs=<number> flags.
 const { values: args } = parseArgs({
   options: { only: { type: "string" }, runs: { type: "string", default: "1" } },
   strict: true,
@@ -31,6 +37,8 @@ const { values: args } = parseArgs({
 const runsPerCase = Number(args.runs);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// An answer is correct when an urgent case shows emergency guidance, or a normal case gets the expected
+// first service (or no service at all when the expected `first` is null).
 const correct = (c: Case, o: Outcome) =>
   c.urgent ? o.urgent : !o.urgent && (o.picks[0]?.service_id ?? null) === c.first;
 
@@ -48,6 +56,8 @@ async function main() {
   const times: number[] = [];
   let needPause = false;
 
+  // For each case, follow the endpoint's order: a crisis phrase first, then the injection guard, then the
+  // AI. If the AI answer is unusable, the keyword matcher answers instead, as in the app.
   for (const c of cases) {
     const outcomes: Outcome[] = [];
     if (hasUrgentCue(c.input)) {
@@ -90,6 +100,8 @@ async function main() {
     console.log(`${c.id} ${c.category.padEnd(8)} expected ${String(row.expected).padEnd(24)} ${outcomes.map((o) => o.path).join(",").padEnd(14)} ${shown}  ${outcomes.map((o) => `${o.ms} ms`).join(", ")}`);
   }
 
+  // Summary: how often the model alone was right, how often the final answer was right,
+  // how many AI answers failed, and the median and slowest response times.
   const called = results.filter((r) => r.modelCalled);
   times.sort((a, b) => a - b);
   const summary = {
@@ -105,6 +117,7 @@ async function main() {
   };
   console.log(`\n${JSON.stringify(summary, null, 2)}`);
 
+  // Save the full results to eval/live-matcher-results.json, but not for a single --only case.
   if (args.only) return;
   writeFileSync(RESULTS_PATH, `${JSON.stringify({ summary, results }, null, 2)}\n`);
   console.log(`\nWrote ${RESULTS_PATH}`);

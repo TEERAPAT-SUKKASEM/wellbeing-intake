@@ -1,3 +1,8 @@
+// What this test file does: it checks assessUrgency(), which makes the final ROUTINE or URGENT decision
+// from the AI answer, the crisis phrases and the student's own choice.
+// Why it matters: it proves the PRD TEST-06 rule: when the AI is not chosen, off, blocked, over budget or
+// failing, the deterministic fallback decides; and the AI can raise urgency but never lower it.
+// How to run it: `pnpm test`.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assessUrgency, guidanceFor } from "@/lib/urgency/assess";
 
@@ -30,6 +35,7 @@ afterEach(() => {
   fetchMock.mockReset();
 });
 
+// The AI, the crisis phrases and the student each have a vote; any single URGENT vote wins.
 describe("the urgency rule: URGENT if anyone says so", () => {
   it.each([
     ["ROUTINE", "ROUTINE", CALM, "ROUTINE"],
@@ -43,6 +49,8 @@ describe("the urgency rule: URGENT if anyone says so", () => {
   });
 });
 
+// Every reason to skip the AI is tested, the right reason is recorded, and the shared AI budget (rpc)
+// and the network (fetch) are only touched when they should be.
 describe("the deterministic path", () => {
   const expectFallback = async (
     input: Parameters<typeof assessUrgency>[0],
@@ -99,6 +107,7 @@ describe("the deterministic path", () => {
   });
 });
 
+// Every answer comes with fixed safety wording and phone links (tel:) for emergencies.
 describe("guidance", () => {
   it("always gives fixed wording and working emergency links", () => {
     for (const level of ["ROUTINE", "URGENT"] as const) {

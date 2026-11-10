@@ -1,3 +1,15 @@
+// What this component shows: the admin page to edit the counselling services (name, session length,
+// description, and whether students can see it) and the weekly opening hours of the shared calendar.
+// Used on: /admin (signed-in administrators only).
+// Talks to: GET /api/v1/admin/services, GET /api/v1/admin/availability,
+// PATCH /api/v1/admin/services/{id} and PUT /api/v1/admin/availability.
+// Note: saving settings never moves existing appointments; they keep their times.
+//
+// How this component is organised:
+// 1. State, then one effect that loads services and opening hours together.
+// 2. updateService() changes a service on screen only. saveService() sends one service to the server.
+// 3. saveHours() checks the opening windows, then replaces the whole week on the server.
+// 4. Markup: a list of services, each with a fold-out edit form, then the opening hours form.
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -9,6 +21,7 @@ import {
 } from "@/lib/client/contracts";
 import { UiIcon } from "./UiIcon";
 import { ScrollingTimePicker } from "./ScrollingTimePicker";
+// Day names by number, as the API uses them: 0 = Sunday ... 6 = Saturday.
 const weekdays = [
   "Sunday",
   "Monday",
@@ -21,6 +34,9 @@ const weekdays = [
 
 export function AdminWorkspace() {
   const router = useRouter();
+  // services and availability are null while loading. error: loading failed. message: save result.
+  // refresh: a counter for "Retry loading". busy: a save is running.
+  // editingService: the ID of the service whose edit form is open (only one at a time).
   const [services, setServices] = useState<Service[] | null>(null);
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [error, setError] = useState("");
@@ -28,7 +44,11 @@ export function AdminWorkspace() {
   const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [editingService, setEditingService] = useState<string | null>(null);
+  // locked stops a second save while one is running. A ref changes at once, before React re-renders.
   const locked = useRef(false);
+  // Load all services (also inactive ones) and the opening hours at the same time.
+  // 401 = not signed in: go to sign-in, then come back (next=/admin).
+  // 404 = signed in, but not an administrator. "alive" ignores an answer after the page is closed.
   useEffect(() => {
     let alive = true;
     Promise.all([
@@ -56,12 +76,14 @@ export function AdminWorkspace() {
       alive = false;
     };
   }, [refresh, router]);
+  // Change one service on screen only. Nothing is saved until "Save service" is pressed.
   function updateService(index: number, patch: Partial<Service>) {
     setServices(
       (rows) =>
         rows?.map((s, i) => (i === index ? { ...s, ...patch } : s)) ?? null,
     );
   }
+  // Save one service. Only the editable fields are sent (not the ID), and the name is trimmed.
   async function saveService(service: Service) {
     if (locked.current) return;
     locked.current = true;
@@ -77,6 +99,8 @@ export function AdminWorkspace() {
     );
     locked.current = false;
     setBusy(false);
+    // On success, replace the service with the server's saved copy.
+    // 409 name_exists: another service already has this name.
     if (r.ok && r.data) {
       setServices(
         (rows) => rows?.map((s) => (s.id === service.id ? r.data! : s)) ?? null,
@@ -94,6 +118,9 @@ export function AdminWorkspace() {
   async function saveHours(e: React.FormEvent) {
     e.preventDefault();
     if (!availability || locked.current) return;
+    // Check the windows before saving. Sort them by day and start time, then make sure each window
+    // ends after it starts and does not overlap the window before it on the same day.
+    // "HH:MM" times compare correctly as text, because they always have two digits.
     const sorted = [...availability.windows].sort(
       (a, b) =>
         a.weekday - b.weekday || a.start_time.localeCompare(b.start_time),
@@ -115,6 +142,8 @@ export function AdminWorkspace() {
     locked.current = true;
     setBusy(true);
     setMessage("");
+    // PUT replaces the whole week at once, so every window on screen is sent,
+    // including several windows on the same day. The server checks the data again.
     const r = await api<Availability>("/admin/availability", {
       method: "PUT",
       body: availability,
@@ -128,6 +157,9 @@ export function AdminWorkspace() {
       );
     } else setMessage(errorMessage(r.error));
   }
+  // Each service has an "Edit" button that folds its form open or closed.
+  // aria-expanded and aria-controls tell screen readers whether the form is open and which form it is.
+  // Every form is disabled (fieldset disabled) while a save is running.
   return (
     <div className="space-y-6">
       <header className="route-intro">
@@ -262,6 +294,8 @@ export function AdminWorkspace() {
               Each session and its 15-minute buffer must fit inside a window.
             </p>
             <fieldset disabled={busy} className="space-y-4">
+              {/* One row per opening window: a day, an "Opens" time and a "Closes" time. */}
+              {/* A day can have several windows. Edits stay on screen until the week is saved. */}
               {availability.windows.map((window, index) => (
                 <div
                   className="opening-window-row"
@@ -338,6 +372,7 @@ export function AdminWorkspace() {
                   appointment times.
                 </p>
               )}
+              {/* A new window starts as Monday 09:00-17:00. At most 50 windows are allowed. */}
               <button
                 className="opening-window-add"
                 type="button"

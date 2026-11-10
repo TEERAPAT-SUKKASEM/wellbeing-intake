@@ -1,3 +1,8 @@
+// What this test file does: it checks suggestWithAi(), the AI part of the optional service matcher,
+// using a fake network.
+// Why it matters: it stops the AI from inventing services, adding free-text advice or receiving more than
+// the student's text and the service list. (An extra feature, not one of the PRD's 7 tests.)
+// How to run it: `pnpm test`.
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { suggestWithAi } from "@/lib/matching/ai";
@@ -32,6 +37,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Valid picks are kept in order; invented services, extra text, bad shapes and errors all give null.
 describe("suggestWithAi", () => {
   it("accepts allowed choices in the model's order", async () => {
     fetchMock.mockResolvedValue(

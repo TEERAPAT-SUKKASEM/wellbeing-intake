@@ -1,3 +1,8 @@
+// What this file does: the keyword-based service matcher. It suggests at most two active services
+// for a student's short description, each with a fixed reason code.
+// Why it exists: POST /finder/suggest must still answer when the AI is off, skipped or failing.
+// Key idea: a service is suggested only when the words clearly fit; otherwise the list is empty.
+//
 // The deterministic half of service matching. Pure and dependency-free, like the urgency phrases: this
 // is what answers when the AI is off, skipped or failing, so it must never guess. When nothing clearly
 // fits, the answer is an empty list and the student browses the catalogue as usual.
@@ -5,8 +10,11 @@
 // Admins can add and rename services, so a service's topic is read from its own published name and
 // description, never from a fixed list of ids.
 
+// The only reasons a suggestion can carry. They are codes, not sentences: the web page shows its own
+// fixed sentence for each code, so no AI-written text ever reaches the student.
 export const REASON_CODES = ["STUDY_SUPPORT", "GENERAL_SUPPORT", "URGENT_SUPPORT", "RELATED_SERVICE"] as const;
 export type ReasonCode = (typeof REASON_CODES)[number];
+// A topic is a reason code that names a kind of service. RELATED_SERVICE is the neutral extra code.
 type Topic = Exclude<ReasonCode, "RELATED_SERVICE">;
 
 export type CatalogueEntry = { id: string; name: string; description: string };
@@ -14,6 +22,7 @@ export type Recommendation = { service_id: string; reason_code: ReasonCode };
 
 export const MAX_RECOMMENDATIONS = 2;
 
+// Lower case, and curly apostrophes become straight ones, so all text is compared the same way.
 const normalize = (text: string) => text.toLowerCase().replace(/[‘’]/g, "'");
 
 // Checked against the service name first, then its description; the first topic found wins.
@@ -23,6 +32,7 @@ const SERVICE_TOPICS: readonly (readonly [Topic, RegExp])[] = [
   ["GENERAL_SUPPORT", /\b(?:general|anything|worr(?:y|ies)|feelings?|low mood|anxiety|relationships?)\b/],
 ];
 
+// The topic of one service, or null if neither its name nor its description shows a known topic.
 export function topicOf(service: CatalogueEntry): Topic | null {
   for (const text of [service.name, service.description]) {
     const normalized = normalize(text);
@@ -66,11 +76,15 @@ const GENERIC_WORDS = new Set([
   "with", "would", "your",
 ]);
 
+// A very small stemmer (it cuts a common ending off a word): "exams" -> "exam", "stressed" -> "stress".
+// "stress" keeps its last "s", because a double "s" is not a plural.
 const stem = (word: string) => word.replace(/(?:ing|ed|(?<!s)s)$/, "");
 
 // Apostrophes split words, so contractions such as "can't" leave only short pieces that are dropped.
 // Thai vowel and tone marks are \p{M}, so they stay inside their word.
 function contentWords(text: string): Set<string> {
+  // Words of 4+ letters that are not generic. The filter runs again after stemming, because stemming
+  // can make a word short or turn it into a generic word ("needs" -> "need").
   const words = normalize(text)
     .split(/[^\p{L}\p{M}]+/u)
     .filter((word) => word.length >= 4 && !GENERIC_WORDS.has(word))
@@ -83,6 +97,8 @@ export function matchDeterministic(text: string, catalogue: readonly CatalogueEn
   const normalized = normalize(text);
   const picks: Recommendation[] = [];
 
+  // Step 1: for each topic the text mentions, in ranked order, add every service with that same topic.
+  // The reason code is the topic, so it always describes the service it is attached to.
   for (const [topic, pattern, thai] of TEXT_TOPICS) {
     if (!pattern.test(normalized) && !thai.some((cue) => normalized.includes(cue))) continue;
     for (const service of catalogue) {
@@ -91,6 +107,7 @@ export function matchDeterministic(text: string, catalogue: readonly CatalogueEn
   }
 
   // A service with no recognisable topic can still fit on its own published words.
+  // Step 2: rank those services by how many content words they share with the text, most first.
   const asked = contentWords(text);
   const related = catalogue
     .filter((service) => topicOf(service) === null)
@@ -102,11 +119,14 @@ export function matchDeterministic(text: string, catalogue: readonly CatalogueEn
     .sort((a, b) => b.overlap - a.overlap);
   for (const { service } of related) picks.push({ service_id: service.id, reason_code: "RELATED_SERVICE" });
 
+  // Step 3: topic matches come first, word matches after; finalize keeps the first two.
   return finalize(picks, catalogue);
 }
 
 /** The last word on every answer, AI or not: active services only, no repeats, best first, at most two. */
 export function finalize(picks: readonly Recommendation[], catalogue: readonly CatalogueEntry[]): Recommendation[] {
+  // The catalogue holds only active services, read by the server. Its ids are the allowlist (the
+  // only ids we accept); an id the model invented, or an inactive one, is dropped here.
   const active = new Set(catalogue.map((service) => service.id));
   const seen = new Set<string>();
   const result: Recommendation[] = [];

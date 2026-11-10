@@ -1,9 +1,15 @@
+// What this test file does: it checks the Private Access Key functions (make, derive, clean up, hash)
+// and the in-memory rate limiter.
+// Why it matters: the access key is a student's only way back to a request, with no login (PRD 3A.2,
+// TEST-01 and TEST-03). Keys must be hard to guess, stored only as a hash, and guessing must be slowed.
+// How to run it: `pnpm test`.
 import { describe, expect, it } from "vitest";
 import { deriveAccessKey, generateAccessKey, hashAccessKey, normalizeAccessKey } from "@/lib/access-key";
 import { addHit, clientAddress, isLimited } from "@/lib/rate-limit";
 
 const FORMAT = /^WB-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/;
 
+// Keys have a fixed, easy-to-read format, never repeat, stay the same for a retry, and are hashed one way.
 describe("access keys", () => {
   it("look like WB-XXXX-XXXX-XXXX and avoid confusable characters", () => {
     for (let i = 0; i < 200; i++) expect(generateAccessKey()).toMatch(FORMAT);
@@ -43,6 +49,7 @@ describe("access keys", () => {
   });
 });
 
+// The limiter counts hits per scope and per address, and forgets them after the time window ends.
 describe("rate limiter", () => {
   it("limits after the allowed number of hits and frees up after the window", () => {
     const t0 = 1_000_000;

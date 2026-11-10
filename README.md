@@ -7,14 +7,15 @@ followed by an automatic 15-minute buffer, so students don't meet in the entrywa
 > **Demo data only.** This is a prototype. Never load real student records, and never type real personal
 > problems into the deployed demo.
 
+- **How the code works, for explaining it:** [`docs/CODE-GUIDE.md`](docs/CODE-GUIDE.md)
 - Product requirements: [`docs/PRD.md`](docs/PRD.md) (the earlier design is in [`docs/archive/`](docs/archive))
 - API contract (OpenAPI 3.1): [`openapi.yaml`](openapi.yaml)
 - Building the screens: [`docs/BACKEND-HANDOFF.md`](docs/BACKEND-HANDOFF.md)
 - Operations: [`RUNBOOK.md`](RUNBOOK.md)
 - Earlier frontend notes: [`docs/FRONTEND-HANDOFF.md`](docs/FRONTEND-HANDOFF.md)
-- **Live:** <https://wellbeing-intake.vercel.app> (runs the previous design until this rebuild is switched on)
+- **Live:** <https://wellbeing-intake.vercel.app>
 
-Coursework A3, A5, A6/A7 and A8 in `docs/` describe the previous design and have not been updated for this rebuild.
+Every source file starts with a short plain-English comment saying what it does and why.
 
 ## Stack
 

@@ -1,3 +1,8 @@
+// What this test file does: it runs the PRD's seven required tests, TEST-01 to TEST-07, against the real
+// route code and the real local database.
+// Why it matters: it is the main proof that the system meets the team PRD: anonymous booking, the
+// 15-minute buffer, the access key, cancellation, the staff-only queue, AI fallback and the webhook.
+// How to run it: `pnpm test:integration` (needs the local Supabase database from `pnpm db:start`).
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -24,8 +29,10 @@ import {
 
 // The PRD's 7 essential test paths (docs/PRD.md, section 7), one describe block each.
 
+// The access key format: WB- and three groups of 4 characters, with no confusable 0, O, 1 or I.
 const KEY_FORMAT = /^WB-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/;
 
+// How: book with no email, name, student id or login; then show the database has no column for them.
 describe("TEST-01 Privacy Boundary: anonymous request submission", () => {
   it("succeeds with no email, legal identity or auth token", async () => {
     const slot = await nextFreeSlot();
@@ -72,6 +79,8 @@ describe("TEST-01 Privacy Boundary: anonymous request submission", () => {
   });
 });
 
+// How: book 10:00-10:45 on a quiet weekday, then check that no service offers any time from 10:00
+// to 11:00, and that the database itself refuses a booking at 10:45.
 describe("TEST-02 Business Logic: 15-minute privacy buffer", () => {
   const date = quietWeekday(20);
   const at = (time: string) => campusTime(date, time).replace(".000Z", "Z");
@@ -140,6 +149,7 @@ describe("TEST-02 Business Logic: 15-minute privacy buffer", () => {
   });
 });
 
+// How: the real key returns the right request; a wrong, broken or missing key gets the very same 404.
 describe("TEST-03 Core Flow: status check by access key", () => {
   it("a valid key returns the accurate request", async () => {
     const created = await book({ alias: "StatusCheck" });
@@ -178,6 +188,7 @@ describe("TEST-03 Core Flow: status check by access key", () => {
   });
 });
 
+// How: cancel with the key, see status CANCELLED, then book the same time again at once (it is free).
 describe("TEST-04 Core Flow: anonymous cancellation", () => {
   const cancel = (id: string, accessKey: string) =>
     call(cancelRequest, { method: "POST", path: `/requests/${id}/cancel`, params: { id }, body: { access_key: accessKey } });
@@ -218,6 +229,7 @@ describe("TEST-04 Core Flow: anonymous cancellation", () => {
   });
 });
 
+// How: call the queue with no login and with a fake token (401), and as an admin (404, wrong role).
 describe("TEST-05 Role Boundary: practitioner queue", () => {
   it("rejects calls without credentials with 401", async () => {
     const none = await call(queue, { path: "/practitioner/queue" });
@@ -248,11 +260,15 @@ describe("TEST-05 Role Boundary: practitioner queue", () => {
   });
 });
 
+// How: a fake AI server on this computer returns an error; the booking still succeeds, using the
+// student's own choice, with emergency links. Other tests switch the fake AI to a working answer.
 describe("TEST-06 AI & Fallback: AI triage processing failure", () => {
   let llm: Server;
   let llmMode: "error" | "routine" | "urgent" = "error";
   let llmBodies: string[] = [];
 
+  // Start the fake AI provider and point the app at it. llmMode chooses: error, ROUTINE or URGENT.
+  // llmBodies keeps every request the app sent, so a test can see what the AI received.
   beforeAll(async () => {
     llm = createServer((req, res) => {
       let raw = "";
@@ -345,12 +361,16 @@ describe("TEST-06 AI & Fallback: AI triage processing failure", () => {
   });
 });
 
+// How: a fake Notification Hub on this computer receives the webhook. On confirm it must get exactly
+// the 4 PRD fields, correctly signed, with no alias, note, urgency or access key.
 describe("TEST-07 Inter-team Webhook: outbound confirmation", () => {
   type Received = { headers: Record<string, string | string[] | undefined>; raw: string; body: Record<string, unknown> };
   let hub: Server;
   let received: Received[] = [];
   let failNext = 0;
 
+  // Start the fake Hub and point the app at it. `received` keeps each delivery; failNext makes the
+  // next N deliveries fail with 503, to act out a Hub outage.
   beforeAll(async () => {
     hub = createServer((req, res) => {
       let raw = "";

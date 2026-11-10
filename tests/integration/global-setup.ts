@@ -1,3 +1,8 @@
+// What this file does: it runs once before all integration tests. It checks that the database settings
+// exist, then runs `pnpm seed` to reset the local database to the demo data.
+// Why it matters: every run starts from the same clean data. Because seed refuses a remote database
+// (scripts/lib/db-target.ts), the tests cannot wipe a hosted database by mistake.
+// How to run it: it is not run by itself; vitest.config.mts runs it first for `pnpm test:integration`.
 import { execSync } from "node:child_process";
 import { config } from "dotenv";
 

@@ -1,3 +1,7 @@
+// What this test file does: it checks assessWithAi(), the call to the AI model, using a fake network.
+// Why it matters: for PRD TEST-06, any bad or failed AI answer must become "no answer", and the
+// student's note must be the only student data sent to the AI provider.
+// How to run it: `pnpm test`.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assessWithAi } from "@/lib/urgency/ai";
 
@@ -26,6 +30,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Only an exact {"urgency":"ROUTINE"} or {"urgency":"URGENT"} answer is used; anything else gives null.
 describe("assessWithAi", () => {
   it.each([
     ['{"urgency":"ROUTINE"}', "ROUTINE"],
