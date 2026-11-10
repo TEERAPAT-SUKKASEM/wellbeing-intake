@@ -189,7 +189,7 @@ openapi.yaml              the API contract (20 endpoints)
 - When a practitioner confirms (or later cancels/reschedules), the database writes an event into the
   **outbox** table **in the same transaction** as the decision. Either both happen or neither.
 - `src/lib/events/dispatcher.ts` sends it at once; if the Hub is down, the event waits and the scheduled
-  job (`.github/workflows/dispatch.yml`, every 3 hours) or the next decision retries it, with growing
+  job (`.github/workflows/dispatch.yml`, every 15 minutes) or the next decision retries it, with growing
   delays (30 s, 60 s, 120 s, ...). After 6 failures it is "parked". **The decision is never blocked.**
 - The body has **exactly** the PRD's fields: `event_type`, `appointment_id`, `scheduled_time`,
   `privacy_buffer_end`. No name, note, urgency or service. Checked by a strict schema
@@ -323,7 +323,7 @@ delivered on the first try.
   `supabase db push`.
 - **Secrets** (database keys, AI key, signing secrets) live only in Vercel environment variables and two
   GitHub secrets. `.env.example` lists every variable with no real values.
-- **Keep-alive job** (`dispatch.yml`, every 3 hours): calls `GET /health` so the free database does not
+- **Keep-alive job** (`dispatch.yml`, every 15 minutes): calls `GET /health` so the free database does not
   pause, then resends any waiting webhooks.
 - **Seed safety:** `pnpm seed` wipes and reloads demo data, so it **refuses** any non-local database unless
   you type `--confirm-remote=<exact host>`, and a hosted database also needs a private password.
@@ -449,8 +449,14 @@ delivered on the first try.
     on a real database, the production build, and a secret scan. A red check blocks the merge.
 35. **Could the seed script wipe production?** Not by accident: it refuses any non-local database unless
     you type the exact host, and a tested guard rejects look-alike hosts.
-36. **Why is there a job every 3 hours?** The free database pauses after a week without use; the job keeps
-    it awake and resends any waiting webhooks.
+36. **Why is there a job every 15 minutes?** The free database pauses after a week without use; the job
+    keeps it awake and resends any webhook or Helpdesk callback whose first try failed.
+37. **Is the site real time?** Close to it. Messages to other systems (the Hub webhook, the Helpdesk
+    callback) are sent the moment staff decide. The screens check for changes on a timer
+    (`src/lib/client/auto-refresh.ts`): the staff desk and the referrals list every 15 seconds, and a
+    student's tracked request every 30 seconds, only while the tab is visible. We chose this over "push"
+    (Supabase Realtime) because push needs the browser to read the database directly, and our database
+    refuses every browser read and students have no account.
 
 ---
 

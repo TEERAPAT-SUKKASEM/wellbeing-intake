@@ -7,10 +7,12 @@
 // PATCH /api/v1/requests/{id}/status, and GET /api/v1/slots (through SlotSelector) when rescheduling.
 // GET /api/v1/practitioner/referrals is asked once on load, to decide whether to show the referrals tab.
 // Note: staff never see a student's access key. A student appears only by alias or "Anonymous student".
+// Auto-refresh: while the tab is visible, the queue and the schedule are checked again every 15 seconds
+// (useAutoRefresh), so new bookings appear without pressing Refresh.
 //
 // How this component is organised:
 // 1. State, then effects for the booking popup, loading the queue and the schedule together,
-//    and the one-time referrals check.
+//    the one-time referrals check, and the 15-second background check (checkForChanges).
 // 2. Helpers: selectDate() picks a day, reload() data, open() a request, confirm() asks first,
 //    decide() sends the decision, switchTab() changes tab.
 // 3. Markup: the tabs, the date and view controls, the tab panels, the booking popup
@@ -19,6 +21,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client/api";
+import { lastUpdatedTime, STAFF_REFRESH_MS, useAutoRefresh } from "@/lib/client/auto-refresh";
 import {
   addDays,
   campusDate,
@@ -67,6 +70,10 @@ export function PractitionerDesk() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
+  // updatedAt: when the queue and the schedule last loaded successfully (shown as "Last updated").
+  // loadVersion: goes up by 1 each time an ordinary load starts, so an older background answer is dropped.
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const loadVersion = useRef(0);
   // selected: the request open in the booking popup. rescheduling and slot: the replacement time picker.
   // busy: a decision is being saved. message: the result shown after a decision.
   const [selected, setSelected] = useState<AppointmentRequest | null>(null);
@@ -107,6 +114,7 @@ export function PractitionerDesk() {
   useEffect(() => {
     if (!rangeStart) return;
     let alive = true;
+    loadVersion.current += 1;
     Promise.all([
       api<AppointmentRequest[]>("/practitioner/queue"),
       api<AppointmentRequest[]>(
@@ -129,6 +137,7 @@ export function PractitionerDesk() {
       }
       setQueue(q.data ?? []);
       setSchedule(s.data ?? []);
+      setUpdatedAt(new Date());
       setError("");
     });
     return () => {
@@ -148,6 +157,38 @@ export function PractitionerDesk() {
       alive = false;
     };
   }, []);
+  // Auto-refresh: load the queue and the schedule again in the background. Unlike reload(), it shows no
+  // skeleton, keeps the booking popup open and never shows an error: if a check fails, the last good data
+  // stays on screen and the next check tries again. If an ordinary load started meanwhile (new date,
+  // new view, Refresh or a decision), loadVersion has moved on and this older answer is dropped.
+  // It is skipped while the confirmation dialog is open, so nothing changes behind a decision.
+  async function checkForChanges() {
+    if (dialog.current?.open) return;
+    const version = loadVersion.current;
+    const [q, s] = await Promise.all([
+      api<AppointmentRequest[]>("/practitioner/queue"),
+      api<AppointmentRequest[]>(
+        `/practitioner/schedule?from=${rangeStart}&to=${rangeEnd}`,
+      ),
+    ]);
+    if (version !== loadVersion.current) return;
+    // The sign-in ended meanwhile: leave the page, as an ordinary load would, so no staff data stays.
+    if (q.status === 401 || s.status === 401) {
+      router.replace("/sign-in?next=/practitioner");
+      return;
+    }
+    if (!q.ok || !s.ok) return;
+    setQueue(q.data ?? []);
+    setSchedule(s.data ?? []);
+    setUpdatedAt(new Date());
+  }
+  // Every 15 seconds while the tab is visible. Paused until the first load is done, during an ordinary
+  // load, after a load error (the Retry button handles that) and while a decision is saving.
+  useAutoRefresh(
+    checkForChanges,
+    STAFF_REFRESH_MS,
+    Boolean(rangeStart) && !loading && !error && !busy,
+  );
   // Pick another date (from the date field or the month grid) and close the booking popup.
   // In the Month view, a day in the same month keeps the same range, so no new load and no skeleton.
   function selectDate(next: string) {
@@ -263,7 +304,7 @@ export function PractitionerDesk() {
       </div>
       <div className="flex flex-wrap items-end gap-4 rounded-box bg-base-100 p-5">
         {/* The date field and the Day / Week / Month choice show only on the Schedule tab. */}
-        {/* Refresh shows on every tab, but it reloads only the queue and the schedule. */}
+        {/* Refresh shows on every tab. It reloads the queue, the schedule and the referrals list. */}
         {activeTab === "schedule" && <>
         {/* In the Month view the date is the selected day; otherwise it is the first day shown. */}
         {/* An empty date field gives "", which is ignored. */}
@@ -305,6 +346,11 @@ export function PractitionerDesk() {
         </button>
         <p className="text-sm text-base-content/70">
           Campus time · Bangkok (UTC+7)
+        </p>
+        {/* Auto-refresh status. "Last updated" moves on only when a load or a background check succeeds. */}
+        <p className="text-sm text-base-content/70">
+          Updates every {STAFF_REFRESH_MS / 1000} seconds
+          {updatedAt && ` · Last updated ${lastUpdatedTime(updatedAt)}`}
         </p>
       </div>
       {/* The result of the last decision, once the booking popup has closed. */}

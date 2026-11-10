@@ -1,5 +1,5 @@
 # What this file is for: a scheduled GitHub Actions workflow that calls the live app (it runs no tests).
-# When it is used: automatically every 3 hours, or by hand with "Run workflow" in the GitHub Actions tab.
+# When it is used: automatically every 15 minutes, or by hand with "Run workflow" in the GitHub Actions tab.
 name: Dispatch & keep-alive
 
 # One call does both jobs: it touches the database, clearing Supabase Free's ~7-day inactivity
@@ -10,10 +10,13 @@ name: Dispatch & keep-alive
 # step is skipped, so the schedule never produces a failing run.
 
 on:
-  # Cron time is UTC: minute 17 of every 3rd hour (00:17, 03:17, 06:17 ...). Minute 17 avoids the busy
-  # start of the hour, when GitHub delays scheduled runs the most. Schedules run from `main` only.
+  # Every 15 minutes, at minutes 7, 22, 37 and 52 of each hour. These minutes avoid the busy start of the
+  # hour, when GitHub delays scheduled runs the most. Schedules run from `main` only, and GitHub may still
+  # start a run a few minutes late. Each run takes seconds; GitHub Actions is free for a public repository.
+  # A failed delivery is retried only when it is due (30 s, 60 s, 120 s ... after the last try), so
+  # running more often does not use up its tries faster; it only means a due retry waits at most 15 minutes.
   schedule:
-    - cron: "17 */3 * * *"
+    - cron: "7,22,37,52 * * * *"
   # Adds a "Run workflow" button so the same job can be started by hand.
   workflow_dispatch:
 

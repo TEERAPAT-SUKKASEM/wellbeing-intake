@@ -6,10 +6,13 @@
 // Preview mode uses fictional in-memory data instead.
 // Note: the key is sent in a header, not in the URL, so it does not appear in web server logs.
 // The student's note is never shown here.
+// Auto-refresh: while a Pending or Confirmed request is on screen, it is checked again every 30 seconds
+// (useAutoRefresh), so an approval, a new time or a cancellation shows up without pressing the button.
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { studentApi } from "@/lib/client/booking-preview";
+import { STUDENT_REFRESH_MS, useAutoRefresh } from "@/lib/client/auto-refresh";
 import {
   campusTime,
   errorMessage,
@@ -51,11 +54,14 @@ export function RequestsDashboard({
   const [message, setMessage] = useState("");
   const [error, setError] = useState(false);
   // dialog: the cancel confirmation. resultRef: the result card, which gets focus after a lookup.
-  // keyInput: the key box, which gets focus after "Clear". version: ignores an old lookup answer.
+  // keyInput: the key box, which gets focus after "Clear". version: goes up on every lookup, clear,
+  // cancel and change of the key box, so an older lookup or background check answer is ignored.
   const dialog = useRef<HTMLDialogElement>(null);
   const resultRef = useRef<HTMLElement>(null);
   const keyInput = useRef<HTMLInputElement>(null);
   const version = useRef(0);
+  // autoCheck: false after a background check got 404 or 429; the next manual check turns it on again.
+  const [autoCheck, setAutoCheck] = useState(true);
   async function lookup() {
     const attempt = ++version.current;
     setBusy(true);
@@ -77,6 +83,7 @@ export function RequestsDashboard({
     if (r.ok && r.data) {
       setRequest(r.data);
       setActiveKey(normalized);
+      setAutoCheck(true);
       requestAnimationFrame(() => resultRef.current?.focus());
     } else
       setMessage(
@@ -89,6 +96,8 @@ export function RequestsDashboard({
   // busy stops a second click while the first cancel is running.
   async function cancel() {
     if (!request || busy) return;
+    // Ignore any background check that is still running, so it cannot put back the old status.
+    version.current++;
     setBusy(true);
     setMessage("");
     // The server checks the access key again before it cancels.
@@ -121,6 +130,43 @@ export function RequestsDashboard({
     setMessage("");
     keyInput.current?.focus();
   }
+  // Auto-refresh: check the request on screen again in the background with the same key. It shows no
+  // "Checking status…" and moves no focus. Only when something changed does the card update, with a
+  // polite message that says what changed (screen readers read it out). It is skipped while the cancel
+  // dialog is open. An answer is dropped if the student checked again, cleared, typed or cancelled meanwhile.
+  // 404 (the request no longer exists) or 429 (too many tries) stops the checks until the next manual
+  // check, so background checks never keep adding to the failed-key counter that blocks key guessing.
+  async function checkForChanges() {
+    if (!request || dialog.current?.open) return;
+    const attempt = version.current;
+    const r = await studentApi(preview)<AppointmentRequest>("/requests/me", {
+      headers: { "X-Access-Key": activeKey },
+    });
+    if (attempt !== version.current) return;
+    if (!r.ok || !r.data) {
+      if (r.status === 404 || r.status === 429) setAutoCheck(false);
+      return;
+    }
+    const fresh = r.data;
+    const statusChanged = fresh.status !== request.status;
+    const timeChanged = fresh.requested_slot_start !== request.requested_slot_start;
+    if (!statusChanged && !timeChanged) return;
+    setRequest(fresh);
+    setError(false);
+    setMessage(
+      statusChanged
+        ? `Update: your request is now “${STATUS_LABELS[fresh.status]}”.${timeChanged ? " The time has changed too, so check the new date and time below." : ""}`
+        : "Update: a practitioner changed your appointment time. Check the new date and time below.",
+    );
+  }
+  // Checks run only for a request that can still change (Pending or Confirmed), not in the
+  // development preview, and not while a lookup or a cancel is running.
+  const autoChecking =
+    !preview &&
+    autoCheck &&
+    request !== null &&
+    (request.status === "PENDING" || request.status === "CONFIRMED");
+  useAutoRefresh(checkForChanges, STUDENT_REFRESH_MS, autoChecking && !busy);
   // Layout: title, emergency contacts, the key form, a message line, the result card, and the cancel dialog.
   // The key box has autoComplete="off" and spellCheck={false}: the browser does not save or check the key.
   // Cancel is offered only for Pending or Confirmed requests, and always asks for confirmation first.
@@ -157,6 +203,7 @@ export function RequestsDashboard({
             value={key}
             disabled={busy}
             onChange={(e) => {
+              version.current++;
               setKey(e.target.value);
               setRequest(null);
               setMessage("");
@@ -222,6 +269,12 @@ export function RequestsDashboard({
             <p>
               This request is cancelled. To request another appointment, start
               again from services.
+            </p>
+          )}
+          {/* Tells the student that this card keeps itself up to date while the page stays open. */}
+          {autoChecking && (
+            <p className="text-sm text-base-content/70">
+              This page checks for updates every {STUDENT_REFRESH_MS / 1000} seconds while it is open.
             </p>
           )}
           </div>
