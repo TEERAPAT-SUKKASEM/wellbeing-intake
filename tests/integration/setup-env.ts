@@ -1,5 +1,5 @@
 // What this file does: it runs before each integration test file and sets fixed settings: test secrets,
-// AI off, no webhook address, and rate limits so high that they never get in the way.
+// AI off, Helpdesk referrals off, no webhook address, and rate limits so high that they never get in the way.
 // Why it matters: the tests must give the same result on every computer and in CI, and must never call
 // a real AI provider or a real Notification Hub.
 // How to run it: it is not run by itself; vitest.config.mts loads it for `pnpm test:integration`.
@@ -29,3 +29,12 @@ process.env.RATE_REQUESTS_PER_IP = "100000";
 process.env.RATE_KEY_FAILURES_PER_IP = "100000";
 process.env.RATE_TRIAGE_CHECKS_PER_IP = "100000";
 process.env.RATE_REQUESTS_PER_HOUR = "100000";
+// Helpdesk referrals (docs/HELPDESK-REFERRALS.md) are off unless a test turns them on; then every
+// referral route answers the standard 404. tests/integration/referrals.test.ts switches them on.
+process.env.REFERRALS_ENABLED = "false";
+// The bearer token Helpdesk sends to POST/GET/DELETE /referrals. A fixed test value, never a real one.
+process.env.HELPDESK_REFERRAL_TOKEN = "test-referral-token";
+// The HMAC secret our referral callbacks to Helpdesk are signed with. The fake Helpdesk checks it.
+process.env.HELPDESK_WEBHOOK_SECRET = "test-helpdesk-webhook-secret";
+// No callback address unless a test sets one (the referrals test points it at a fake Helpdesk on 127.0.0.1).
+process.env.HELPDESK_WEBHOOK_URL = "";

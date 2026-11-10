@@ -54,12 +54,32 @@ export type AppointmentRequest = Omit<
 export type Availability = {
   windows: { weekday: number; start_time: string; end_time: string }[];
 };
+/** A Helpdesk referral's status: waiting for review, or the final decision. */
+export type ReferralStatus = "received" | "approved" | "declined";
+/**
+ * A referral from Team 14's Helpdesk, as returned by GET /practitioner/referrals. It holds only a random
+ * reference, the service (or null), when the student consented, and our own timestamps (ISO, UTC).
+ */
+export type Referral = {
+  ref: string;
+  service_id: string | null;
+  consent_at: string;
+  status: ReferralStatus;
+  received_at: string;
+  decided_at: string | null;
+};
 /** Plain words for each status, shown to students and staff. */
 export const STATUS_LABELS: Record<RequestStatus, string> = {
   PENDING: "Awaiting approval",
   CONFIRMED: "Confirmed",
   REJECTED: "Declined",
   CANCELLED: "Cancelled",
+};
+/** Plain words for each Helpdesk referral status, shown to staff. */
+export const REFERRAL_STATUS_LABELS: Record<ReferralStatus, string> = {
+  received: "Waiting for review",
+  approved: "Accepted",
+  declined: "Declined",
 };
 /**
  * The campus date (YYYY-MM-DD) for a moment, today by default. Bangkok is always UTC+7 with no

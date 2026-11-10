@@ -151,6 +151,29 @@ export const env = {
     return optional("HELPDESK_API_BASE_URL");
   },
 
+  // Partner integration, the other direction: Helpdesk sends us referrals and we send back the status.
+  // See docs/HELPDESK-REFERRALS.md.
+  /** Main switch for referrals. Off (the default) = every referral endpoint answers 404 not_found. */
+  get referralsEnabled() {
+    return optional("REFERRALS_ENABLED", "false") === "true";
+  },
+  /** Bearer token Helpdesk sends to us on the /referrals endpoints. We make it and give it to them. */
+  get helpdeskReferralToken() {
+    return required("HELPDESK_REFERRAL_TOKEN");
+  },
+  /** HMAC secret for our status callbacks to Helpdesk. Helpdesk makes it and gives it to us. */
+  get helpdeskWebhookSecret() {
+    return required("HELPDESK_WEBHOOK_SECRET");
+  },
+  /**
+   * Where we send the status callbacks. `||` so an empty value means the default:
+   * <HELPDESK_API_BASE_URL without a trailing "/">/webhooks/wellbeing, or "" (off) if that is empty too.
+   */
+  get helpdeskWebhookUrl() {
+    const base = optional("HELPDESK_API_BASE_URL").replace(/\/+$/, "");
+    return optional("HELPDESK_WEBHOOK_URL") || (base ? `${base}/webhooks/wellbeing` : "");
+  },
+
   /** Turns on the built-in fake Notification Hub at /api/v1/mock/hub, for tests and demos. */
   get mockHubEnabled() {
     return optional("MOCK_HUB_ENABLED", "false") === "true";
