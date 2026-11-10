@@ -1,9 +1,11 @@
-// What this component shows: the practitioner "Schedule & triage desk" with two tabs.
+// What this component shows: the practitioner "Schedule & triage desk" with two tabs (three when Helpdesk referrals are on).
 // Schedule: day, week, and month calendars of pending and confirmed sessions, each followed by its privacy buffer.
 // Review requests: pending requests, urgent first. Opening one shows its note and the decision buttons.
+// Helpdesk referrals: the HelpdeskReferrals list, shown only when the referrals feature is switched on.
 // Used on: /practitioner (signed-in practitioners only).
 // Talks to: GET /api/v1/practitioner/queue, GET /api/v1/practitioner/schedule?from=...&to=...,
 // PATCH /api/v1/requests/{id}/status, and GET /api/v1/slots (through SlotSelector) when rescheduling.
+// GET /api/v1/practitioner/referrals is asked once on load, to decide whether to show the referrals tab.
 // Note: staff never see a student's access key. A student appears only by alias or "Anonymous student".
 //
 // How this component is organised:
@@ -23,19 +25,27 @@ import {
   errorMessage,
   STATUS_LABELS,
   type AppointmentRequest,
+  type Referral,
   type RequestStatus,
 } from "@/lib/client/contracts";
+import { HelpdeskReferrals } from "./HelpdeskReferrals";
 import { SlotSelector } from "./SlotSelector";
 import { useCampusToday } from "@/lib/client/use-campus-today";
 import { scheduleMonth } from "@/lib/client/schedule-month";
 import { PractitionerMonth } from "./PractitionerMonth";
 import { UiIcon } from "./UiIcon";
+// The desk's tabs. "referrals" (Helpdesk referrals) exists only when that feature is switched on.
+type DeskTab = "schedule" | "reviews" | "referrals";
 
 export function PractitionerDesk() {
   const router = useRouter();
   // queue: pending requests (Review tab). schedule: sessions in the shown dates (Schedule tab).
   const [queue, setQueue] = useState<AppointmentRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<"schedule" | "reviews">("schedule");
+  const [activeTab, setActiveTab] = useState<DeskTab>("schedule");
+  // referralsOn: GET /practitioner/referrals answered 200, so the Helpdesk referrals tab is shown.
+  // pendingReferrals: how many referrals wait for review, for that tab's badge.
+  const [referralsOn, setReferralsOn] = useState(false);
+  const [pendingReferrals, setPendingReferrals] = useState(0);
   const [schedule, setSchedule] = useState<AppointmentRequest[]>([]);
   // date: the first day shown. It is today in Bangkok until the practitioner picks another date.
   // days: 1 for the Day view, 7 for the Week view.
@@ -112,6 +122,19 @@ export function PractitionerDesk() {
     };
   // Close the booking popup and load fresh data.
   }, [rangeStart, rangeEnd, refresh, router]);
+  // Ask once, alongside the loads above, whether Helpdesk referrals are on. Only a 200 answer shows the
+  // third tab; 404 (feature off) or any other answer keeps it hidden. The answer also fills its badge.
+  useEffect(() => {
+    let alive = true;
+    api<Referral[]>("/practitioner/referrals").then((r) => {
+      if (!alive || r.status !== 200 || !Array.isArray(r.data)) return;
+      setReferralsOn(true);
+      setPendingReferrals(r.data.filter((row) => row.status === "received").length);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   function selectDate(next: string) {
     if (next === date) return;
     const changesRange = view !== "month" || next.slice(0, 7) !== date.slice(0, 7);
@@ -183,7 +206,7 @@ export function PractitionerDesk() {
     ? Array.from({ length: view === "month" ? 1 : days }, (_, i) => addDays(date, i))
     : [];
   // Changing tabs also closes the booking popup and the reschedule picker.
-  function switchTab(tab: "schedule" | "reviews") {
+  function switchTab(tab: DeskTab) {
     setActiveTab(tab);
     setSelected(null);
     setRescheduling(false);
@@ -207,12 +230,17 @@ export function PractitionerDesk() {
       <div role="tablist" aria-label="Practitioner workspace" className="tabs practitioner-tabs" onKeyDown={event => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || busy) return;
         event.preventDefault();
-        const tab = event.key === "Home" ? "schedule" : event.key === "End" ? "reviews" : activeTab === "schedule" ? "reviews" : "schedule";
+        // The tabs in order (the referrals tab only when it is shown). Arrows move one tab and wrap around.
+        const tabs: DeskTab[] = referralsOn ? ["schedule", "reviews", "referrals"] : ["schedule", "reviews"];
+        const step = event.key === "ArrowRight" ? 1 : tabs.length - 1;
+        const tab = event.key === "Home" ? tabs[0] : event.key === "End" ? tabs[tabs.length - 1] : tabs[(tabs.indexOf(activeTab) + step) % tabs.length];
         switchTab(tab);
         event.currentTarget.querySelector<HTMLButtonElement>(`#practitioner-${tab}-tab`)?.focus();
       }}>
         <button type="button" role="tab" id="practitioner-schedule-tab" aria-controls="practitioner-schedule-panel" aria-selected={activeTab === "schedule"} tabIndex={activeTab === "schedule" ? 0 : -1} disabled={busy} className="tab" onClick={() => switchTab("schedule")}>Schedule</button>
         <button type="button" role="tab" id="practitioner-reviews-tab" aria-controls="practitioner-reviews-panel" aria-selected={activeTab === "reviews"} aria-label={`Review requests${!loading && !error ? `, ${queue.length} awaiting review` : ""}`} tabIndex={activeTab === "reviews" ? 0 : -1} disabled={busy} className="tab" onClick={() => switchTab("reviews")}>Review requests <span className="request-count-badge" aria-hidden="true">{loading ? "…" : error ? "—" : queue.length}</span></button>
+        {/* Third tab, only when the referrals feature is on. Its badge counts referrals waiting for review. */}
+        {referralsOn && <button type="button" role="tab" id="practitioner-referrals-tab" aria-controls="practitioner-referrals-panel" aria-selected={activeTab === "referrals"} aria-label={`Helpdesk referrals, ${pendingReferrals} waiting for review`} tabIndex={activeTab === "referrals" ? 0 : -1} disabled={busy} className="tab" onClick={() => switchTab("referrals")}>Helpdesk referrals <span className="request-count-badge" aria-hidden="true">{pendingReferrals}</span></button>}
       </div>
       <div className="flex flex-wrap items-end gap-4 rounded-box bg-base-100 p-5">
         {activeTab === "schedule" && <>
@@ -416,6 +444,18 @@ export function PractitionerDesk() {
                 })}
               </div>
             </section>
+            {/* Helpdesk referrals panel, only when the feature is on. HelpdeskReferrals loads its own list. */}
+            {referralsOn && (
+              <section
+                id="practitioner-referrals-panel"
+                role="tabpanel"
+                aria-labelledby="practitioner-referrals-tab"
+                hidden={activeTab !== "referrals"}
+                className="card card-border gap-4 p-5 sm:p-6"
+              >
+                <HelpdeskReferrals onPendingChange={setPendingReferrals} />
+              </section>
+            )}
           </>
         )
       )}

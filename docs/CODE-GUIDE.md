@@ -129,6 +129,8 @@ openapi.yaml              the API contract (20 endpoints)
 | `GET /health` | anyone | is the app and database up |
 | `POST /internal/events/dispatch` | scheduled job (machine token) | resend waiting webhooks |
 | `POST /webhooks/notification-hub` | the Hub (signed) | delivery receipts |
+| `POST /referrals`, `GET` / `DELETE /referrals/{ref}` | Helpdesk (token; off by default) | referrals from Helpdesk, see `docs/HELPDESK-REFERRALS.md` |
+| `GET /practitioner/referrals`, `PATCH /practitioner/referrals/{ref}` | practitioner, admin | accept or decline a Helpdesk referral |
 
 ---
 
@@ -335,6 +337,17 @@ delivered on the first try.
     any problem we show our hard-coded numbers. The national hotlines 1669 and 1323 are never replaced.
     Every call writes a log line with `"kind":"partner"` and a `team16-…` correlation id that also
     appears in Helpdesk's logs.
+  - **Referrals (Helpdesk → us, and a webhook back), switched off until `REFERRALS_ENABLED=true`:**
+    1. A student on a Helpdesk ticket consents and presses "Send to Wellbeing". Helpdesk then calls our
+       `POST /api/v1/referrals` with only a random `ref`, a service id and the consent time, using a
+       secret token.
+    2. Our staff see it in the **Helpdesk referrals** tab of the practitioner desk and accept or decline it.
+    3. We send a signed webhook (`X-Timestamp`, HMAC `X-Signature`) to Helpdesk with only the `ref` and the
+       status. It is retried with the same `eventId` if Helpdesk is down.
+    - Referrals are never linked to bookings, and are deleted on withdraw or after 30 days.
+    - Code: `src/lib/referrals.ts`, `src/lib/partners/helpdesk-referrals.ts`, `src/app/api/v1/referrals/`,
+      `src/app/api/v1/practitioner/referrals/` and `src/components/HelpdeskReferrals.tsx`.
+    - Full design: `docs/HELPDESK-REFERRALS.md`.
 
 ---
 
@@ -410,29 +423,33 @@ delivered on the first try.
     way.
 27. **What if Helpdesk is down?** Our client waits at most 3 seconds, uses its cached copy, and otherwise
     shows our hard-coded numbers. A student always sees emergency numbers, and booking never waits on it.
+28. **Doesn't a referral from Helpdesk break your anonymity rule?** No. Only a random `ref`, the service
+    and the consent time arrive. The student consents first. We never link a referral to a booking, and we
+    refused Helpdesk's idea of putting the `ref` in booking links, because Helpdesk knows the student behind
+    each `ref`. "Accepted" only closes their ticket; the student still books anonymously on our site.
 
 **Frontend**
 
-28. **Why isn't the key in the URL?** URLs end up in browser history and server logs. We pass it in
+29. **Why isn't the key in the URL?** URLs end up in browser history and server logs. We pass it in
     memory and send it in a header. We also set `Referrer-Policy: no-referrer`.
-29. **Where is the buffer shown?** Students see only "Available"/"Unavailable"; practitioners see a
+30. **Where is the buffer shown?** Students see only "Available"/"Unavailable"; practitioners see a
     separate "Privacy buffer" block after each session on the schedule.
-30. **What did you do for accessibility?** A skip link, labels on every input, keyboard tabs and time
+31. **What did you do for accessibility?** A skip link, labels on every input, keyboard tabs and time
     wheels, native dialogs that keep focus, `aria-live` updates, large click targets, and support for
     high contrast and reduced motion. Automated axe checks found 0 violations.
-31. **What is preview mode?** A development-only fake student API so screens could be built without a
+32. **What is preview mode?** A development-only fake student API so screens could be built without a
     database. It needs both `NODE_ENV=development` and `UI_PREVIEW=true`, so it can never run in
     production.
 
 **Testing and DevOps**
 
-32. **How do you test the AI failing without a real AI?** A tiny fake AI server on `127.0.0.1` returns
+33. **How do you test the AI failing without a real AI?** A tiny fake AI server on `127.0.0.1` returns
     errors; the test proves booking still works.
-33. **What does CI check?** Lint, types, the API contract, unit tests, the AI rule gate, integration tests
+34. **What does CI check?** Lint, types, the API contract, unit tests, the AI rule gate, integration tests
     on a real database, the production build, and a secret scan. A red check blocks the merge.
-34. **Could the seed script wipe production?** Not by accident: it refuses any non-local database unless
+35. **Could the seed script wipe production?** Not by accident: it refuses any non-local database unless
     you type the exact host, and a tested guard rejects look-alike hosts.
-35. **Why is there a job every 3 hours?** The free database pauses after a week without use; the job keeps
+36. **Why is there a job every 3 hours?** The free database pauses after a week without use; the job keeps
     it awake and resends any waiting webhooks.
 
 ---

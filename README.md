@@ -8,6 +8,7 @@ followed by an automatic 15-minute buffer, so students don't meet in the entrywa
 > problems into the deployed demo.
 
 - **How the code works, for explaining it:** [`docs/CODE-GUIDE.md`](docs/CODE-GUIDE.md)
+- Helpdesk (Team 14) referrals design: [`docs/HELPDESK-REFERRALS.md`](docs/HELPDESK-REFERRALS.md)
 - Product requirements: [`docs/PRD.md`](docs/PRD.md) (the earlier design is in [`docs/archive/`](docs/archive))
 - API contract (OpenAPI 3.1): [`openapi.yaml`](openapi.yaml)
 - Building the screens: [`docs/BACKEND-HANDOFF.md`](docs/BACKEND-HANDOFF.md)

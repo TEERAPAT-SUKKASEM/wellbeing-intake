@@ -28,6 +28,8 @@ const SECRET_VARS = [
   "DISPATCH_TOKEN",
   "ACCESS_KEY_SECRET",
   "LLM_API_KEY",
+  "HELPDESK_REFERRAL_TOKEN",
+  "HELPDESK_WEBHOOK_SECRET",
 ];
 // Names that must never appear in client code even when the value is unknown at scan time.
 const FORBIDDEN_NAMES = ["SUPABASE_SERVICE_ROLE_KEY", "service_role"];
