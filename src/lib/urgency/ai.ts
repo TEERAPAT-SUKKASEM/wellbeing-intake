@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { env } from "@/lib/env";
+import { askModelForJson } from "@/lib/llm";
 import { hasPromptInjection, type Urgency } from "@/lib/urgency/keywords";
 
 // The AI-assisted path. This sends the student's intake note to Groq, so it only runs when the student
@@ -22,36 +22,6 @@ const SYSTEM = [
 /** Returns the model's classification, or null on ANY problem; the caller then uses the fallback. */
 export async function assessWithAi(note: string): Promise<Urgency | null> {
   if (hasPromptInjection(note)) return null;
-  if (!env.llmApiKey) return null;
-
-  try {
-    // A bare fetch with exactly two headers: nothing from the visitor's request can ride along.
-    const response = await fetch(`${env.llmBaseUrl.replace(/\/+$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${env.llmApiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        model: env.llmModel,
-        temperature: 0,
-        // A reasoning model spends tokens thinking before it answers; a small limit could cut the JSON off.
-        max_tokens: 1024,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: `Student's note:\n${note}` },
-        ],
-      }),
-      // One attempt only. A slow model must never hold up a student asking for help.
-      signal: AbortSignal.timeout(env.aiTimeoutMs),
-    });
-    if (!response.ok) return null; // auth, rate limit, 5xx
-
-    const body = (await response.json()) as { choices?: { message?: { content?: unknown } }[] };
-    const content = body.choices?.[0]?.message?.content;
-    if (typeof content !== "string") return null;
-
-    const parsed = Assessment.safeParse(JSON.parse(content));
-    return parsed.success ? parsed.data.urgency : null;
-  } catch {
-    return null; // timeout, network failure, text that is not JSON
-  }
+  const parsed = Assessment.safeParse(await askModelForJson(SYSTEM, `Student's note:\n${note}`));
+  return parsed.success ? parsed.data.urgency : null;
 }
