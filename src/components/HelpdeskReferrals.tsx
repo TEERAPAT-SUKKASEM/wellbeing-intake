@@ -6,10 +6,13 @@
 // PATCH /api/v1/practitioner/referrals/{ref} with { status: "approved" | "declined" }.
 // Note: a referral holds no name, email, student ID or ticket text, and it is never linked to a booking.
 // Accepting only tells Helpdesk "accepted"; the student still books anonymously on this site.
+// Auto-refresh: while the tab is visible, the list is checked again every 15 seconds (useAutoRefresh),
+// so a new referral from Helpdesk appears, and the tab's badge goes up, without pressing Refresh.
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/client/api";
+import { STAFF_REFRESH_MS, useAutoRefresh } from "@/lib/client/auto-refresh";
 import {
   campusDateTime,
   errorMessage,
@@ -57,12 +60,15 @@ export function HelpdeskReferrals({
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const locked = useRef(false);
+  // loadVersion: goes up by 1 each time an ordinary load starts, so an older background answer is dropped.
+  const loadVersion = useRef(0);
   // Load the referrals and the service names at the same time.
   // 401 = not signed in: go to the sign-in page, then come back here (next=/practitioner).
   // 404 = the feature was switched off. If only the service names fail, the list still shows.
   // "alive" ignores an old answer when a newer load has started.
   useEffect(() => {
     let alive = true;
+    loadVersion.current += 1;
     Promise.all([
       api<Referral[]>("/practitioner/referrals"),
       api<Service[]>("/services"),
@@ -97,6 +103,29 @@ export function HelpdeskReferrals({
   useEffect(() => {
     if (pending !== null) onPendingChange?.(pending);
   }, [pending, onPendingChange]);
+  // Auto-refresh: load the list again in the background. No skeleton, no disabled buttons and no error:
+  // if a check fails, the last good list stays and the next check tries again. The service names are not
+  // asked again, because they rarely change. It is skipped while the confirmation dialog is open, so a
+  // row never changes behind a decision, and an answer older than an ordinary load is dropped.
+  async function checkForChanges() {
+    if (dialog.current?.open) return;
+    const version = loadVersion.current;
+    const r = await api<Referral[]>("/practitioner/referrals");
+    if (version !== loadVersion.current) return;
+    // The sign-in ended meanwhile: leave the page, as an ordinary load would.
+    if (r.status === 401) {
+      router.replace("/sign-in?next=/practitioner");
+      return;
+    }
+    if (r.ok) setReferrals(r.data ?? []);
+  }
+  // Every 15 seconds while the tab is visible, once the list has loaded. Paused during an ordinary load,
+  // after a load error (the Retry button handles that) and while a decision is saving.
+  useAutoRefresh(
+    checkForChanges,
+    STAFF_REFRESH_MS,
+    referrals !== null && !loading && !error && !busy,
+  );
   // Load again. The list stays on screen meanwhile, with its buttons disabled.
   function reload() {
     setLoading(true);
