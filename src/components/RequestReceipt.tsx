@@ -1,3 +1,10 @@
+// What this component shows: the screen after a request is sent. A dialog shows the
+// Private Access Key (WB-XXXX-XXXX-XXXX) with "Copy access key" and "Track this request".
+// Behind the dialog, a small card lets the student open the key again.
+// Used on: the booking page (/request/new). RequestForm shows it after POST /requests succeeds.
+// Talks to: no API calls. It only shows the receipt that RequestForm received.
+// Note: the key is never put in the URL or in browser storage. "Track this request" hands it to the
+// tracking page in memory only (setNavigationKey), so it is gone after a refresh.
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -8,13 +15,19 @@ import {
 } from "@/lib/client/contracts";
 import { SafetyGuidance } from "./SafetyGuidance";
 export function RequestReceipt({ receipt }: { receipt: Receipt }) {
+  // dialog is the key dialog. showKeyButton gets focus back when the dialog closes.
+  // copied and copyError show the result of the Copy button.
   const dialog = useRef<HTMLDialogElement>(null);
   const showKeyButton = useRef<HTMLButtonElement>(null);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
+  // Open the key dialog as soon as the receipt appears, so the student sees the key first.
   useEffect(() => {
     dialog.current?.showModal();
   }, []);
+  // The dialog content. The key can only be shown now: it cannot be recovered later.
+  // Copy uses the browser clipboard. If the browser blocks it, we ask the student to copy by hand;
+  // "select-all" lets them select the whole key with one click.
   const content = (
     <>
       <h2 id="receipt-title" className="text-2xl font-semibold">
@@ -72,6 +85,9 @@ export function RequestReceipt({ receipt }: { receipt: Receipt }) {
       </div>
     </>
   );
+  // The card behind the dialog: "Show access key" opens the dialog again.
+  // An Urgent request repeats the safety guidance on the card, so it stays visible after the dialog closes.
+  // "I have saved my key" closes the dialog (a method="dialog" form). The Escape key also closes it.
   return (
     <>
       <section className="card card-border gap-4 p-6">

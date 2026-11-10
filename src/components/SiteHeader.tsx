@@ -1,3 +1,10 @@
+// What this component shows: the top bar of every page: the Wellbeing logo, the main links, an
+// "Urgent help" link, staff sign-in or sign-out, and a menu dialog for small screens.
+// The page content (children) is rendered below the header.
+// Used on: every page. src/app/layout.tsx wraps all pages in it.
+// Talks to: GET /api/v1/me (who is signed in, to add the staff workspace link)
+// and DELETE /api/v1/session (sign out).
+// Note: students never sign in. For them /me answers 401, and the header shows only the public links.
 "use client";
 
 import Link from "next/link";
@@ -6,6 +13,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "@/lib/client/api";
 import { UiIcon } from "./UiIcon";
 
+// The signed-in staff member, as returned by GET /me.
 type Me = { role: "practitioner" | "admin"; displayName: string };
 
 export function SiteHeader({
@@ -17,16 +25,22 @@ export function SiteHeader({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  // me: the signed-in staff member, or null. open: the mobile menu is open.
+  // signingOut and error: progress and error text for the sign-out button.
   const [me, setMe] = useState<Me | null>(null);
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState("");
+  // dialog is the mobile menu. trigger is the "Menu" button, so focus can return to it on close.
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  // The staff pages. In preview mode, /me is only checked on these pages.
   const staffPage =
     pathname === "/practitioner" ||
     pathname === "/admin" ||
     pathname === "/sign-in";
+  // Ask the server who is signed in each time the page changes.
+  // "alive" becomes false on cleanup, so an answer for an old page is ignored.
   useEffect(() => {
     if (preview && !staffPage) return;
     let alive = true;
@@ -37,6 +51,7 @@ export function SiteHeader({
       alive = false;
     };
   }, [pathname, preview, staffPage]);
+  // If the window becomes desktop width, close the mobile menu, because the desktop links are visible then.
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 1101px)");
     const close = () => {
@@ -45,6 +60,7 @@ export function SiteHeader({
     desktop.addEventListener("change", close);
     return () => desktop.removeEventListener("change", close);
   }, []);
+  // The logo link. It is used twice: in the header bar and at the top of the mobile menu.
   const brand = (
     <Link href="/" className="wellbeing-brand" aria-label="Wellbeing home">
       <span className="brand-symbol">
@@ -56,6 +72,8 @@ export function SiteHeader({
       </span>
     </Link>
   );
+  // Links for everyone, plus one workspace link that depends on the staff role.
+  // "active" marks the link for the current page (Book is also active on /request/new).
   const links = [
     {
       id: "book",
@@ -97,6 +115,8 @@ export function SiteHeader({
           ]
         : []),
   ];
+  // Sign out: DELETE /session clears the HttpOnly session cookies on the server.
+  // Then go to the home page and refresh, so no staff data stays on screen.
   async function signOut() {
     setSigningOut(true);
     setError("");
@@ -111,6 +131,8 @@ export function SiteHeader({
     router.replace("/");
     router.refresh();
   }
+  // "Sign out" for signed-in staff, "Staff sign in" for everyone else.
+  // mobile = true adds the menu-drawer style and an icon.
   function account(mobile = false) {
     return me ? (
       <button
@@ -127,6 +149,10 @@ export function SiteHeader({
       </Link>
     );
   }
+  // aria-current tells screen readers where the user is: "page" for the exact page,
+  // "location" for a page inside that section (for example /request/new under "Book an appointment").
+  // The mobile menu is a native <dialog> opened with showModal(), so focus stays inside it.
+  // Clicking the backdrop or any link closes it, and onClose moves focus back to the Menu button.
   return (
     <div className="site-shell">
       <header className="site-header">

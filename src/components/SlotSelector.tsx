@@ -1,9 +1,18 @@
+// What this component shows: a date picker and a grid of time slots for one service.
+// Each slot is marked Available, Unavailable or Selected.
+// Used on: the booking page (/request/new, inside RequestForm) and the practitioner desk
+// (/practitioner, when choosing a replacement time to reschedule).
+// Talks to: GET /api/v1/slots?service_id=...&date=YYYY-MM-DD. Preview mode uses fictional slots instead.
+// Note: the server decides which slots are free, including the 15-minute privacy buffer after each
+// session. This component does not calculate booking rules; it only shows what the server returns.
 "use client";
 import { useEffect, useState } from "react";
 import { studentApi } from "@/lib/client/booking-preview";
 import { campusTime, type Slot } from "@/lib/client/contracts";
 import { AppointmentDatePicker } from "./AppointmentDatePicker";
 import { useCampusToday } from "@/lib/client/use-campus-today";
+// Props: value is the chosen slot start time (or ""). onChange tells the parent about a new choice.
+// refresh is a counter from the parent: when it changes, the slots are loaded again.
 export function SlotSelector({
   serviceId,
   value,
@@ -19,12 +28,19 @@ export function SlotSelector({
   initialDate?: string;
   refresh?: number;
 }) {
+  // today is the current date in Bangkok (UTC+7). It is "" during the first render
+  // and is filled in once the page runs in the browser.
   const today = useCampusToday();
+  // chosenDate is "" until the user picks a date, so the date shown falls back to today.
   const [chosenDate, setDate] = useState(initialDate ?? "");
   const date = chosenDate || today;
+  // slots is null while loading. error is true when loading failed.
+  // retry is a counter that the "Retry loading times" button increases.
   const [slots, setSlots] = useState<Slot[] | null>(null);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
+  // Ignore an empty date, the same date, or a date in the past.
+  // A new date clears the old slots and the chosen time, because that time belonged to the old date.
   function changeDate(next: string) {
     if (!next || next === date || next < today) return;
     setDate(next);
@@ -32,6 +48,9 @@ export function SlotSelector({
     setError(false);
     onChange("");
   }
+  // Load the slots when the service, date, retry counter or parent "refresh" changes.
+  // RequestForm increases "refresh" after a 409 slot_unavailable error, so the grid shows fresh data.
+  // "alive" becomes false on cleanup, so a late answer for an older date is ignored.
   useEffect(() => {
     if (!date) return;
     let alive = true;
@@ -47,6 +66,10 @@ export function SlotSelector({
       alive = false;
     };
   }, [serviceId, date, preview, retry, refresh]);
+  // Each slot is a radio button inside a <fieldset>, so keyboard and screen reader users can choose it.
+  // Times are shown in Bangkok time with campusTime(). Unavailable slots are disabled radios.
+  // Students only see "Available" or "Unavailable": never who booked or how many bookings exist.
+  // An empty list means the centre is closed that day.
   return (
     <section className="space-y-4" aria-label="Choose appointment time">
       <AppointmentDatePicker value={date} today={today} onChange={changeDate} />

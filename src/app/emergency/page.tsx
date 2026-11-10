@@ -1,3 +1,7 @@
+// What this page does: shows emergency phone numbers and says this app cannot give immediate help.
+// URL: /emergency
+// Talks to: no API calls. The numbers are hard-coded in src/lib/emergency.ts.
+// Note: the page is built once as static HTML, so it still works when the API or database is down.
 import type { Metadata } from "next";
 import { CANNOT_HELP_NOW, EMERGENCY_CONTACTS } from "@/lib/emergency";
 import { UiIcon } from "@/components/UiIcon";
@@ -8,6 +12,7 @@ export const dynamic = "force-static";
 export const metadata: Metadata = { title: "Emergency contacts" };
 
 export default function EmergencyPage() {
+  // One card per contact. Each button is a tel: link, so on a phone one tap starts the call.
   return (
     <div className="emergency-page space-y-6">
       <header className="route-intro"><h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Emergency contacts</h1></header>

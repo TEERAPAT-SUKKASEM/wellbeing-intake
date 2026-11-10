@@ -1,3 +1,7 @@
+// What this component shows: emergency phone numbers, and a reminder that this is not crisis support.
+// Used on: the home page (/), the booking page (/request/new) and the tracking page (/requests).
+// Talks to: no API calls. The numbers come from the fixed list in src/lib/emergency.ts.
+// Note: each number is a tel: link, so on a phone one tap starts the call.
 import Link from "next/link";
 import { CANNOT_HELP_NOW, EMERGENCY_CONTACTS } from "@/lib/emergency";
 import { UiIcon } from "./UiIcon";
@@ -8,6 +12,8 @@ export function EmergencyBanner({
 }: {
   prominent?: boolean;
 }) {
+  // The "prominent" version is a red alert box with every contact.
+  // No page passes prominent={true} at the moment, so the smaller version below is what users see.
   if (prominent)
     return (
       <aside
@@ -28,6 +34,8 @@ export function EmergencyBanner({
         </ul>
       </aside>
     );
+  // The default version: a short notice, the first two numbers, and a link to the full list on /emergency.
+  // aria-label names the box, so screen reader users can jump straight to it.
   return (
     <aside aria-label="Emergency contacts" className="emergency-notice">
       <UiIcon name="phone" className="emergency-icon size-5" />

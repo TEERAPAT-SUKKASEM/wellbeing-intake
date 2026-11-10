@@ -1,3 +1,8 @@
+// What this test file does: it checks the slot calculator: how a day is cut into bookable times, and
+// which times become unavailable around a booking. No database is used.
+// Why it matters: it is the unit-level proof of the 15-minute privacy buffer (PRD 3A.3, TEST-02) and of
+// showing only "available or not" to the public (PRD 3A.4).
+// How to run it: `pnpm test`.
 import { describe, expect, it } from "vitest";
 import {
   buildGrid,
@@ -20,6 +25,7 @@ const NOW = new Date("2026-11-01T00:00:00Z");
 const slots = (durationMinutes: number, busy: { start: number; end: number }[] = []) =>
   slotsForDate({ date: DATE, durationMinutes, windows: WINDOWS, busy, now: NOW, horizonDays: 30 });
 
+// The day's slot start times: each session is followed by its 15-minute buffer, inside opening hours.
 describe("buildGrid", () => {
   it("steps a 45-minute service by session plus buffer, so the gap is the privacy buffer", () => {
     const grid = buildGrid(DATE, 45, WINDOWS);
@@ -49,6 +55,7 @@ describe("buildGrid", () => {
   });
 });
 
+// A booking blocks its own slot, and also any slot whose session or buffer would overlap that booking.
 describe("slotsForDate: the 15-minute privacy buffer", () => {
   const booked = { start: at("10:00").getTime(), end: at("11:00").getTime() }; // 10:00-10:45 plus its buffer
 
@@ -82,6 +89,7 @@ describe("slotsForDate: the 15-minute privacy buffer", () => {
   });
 });
 
+// Small date and time helpers. Dates follow campus time (UTC+7), not UTC.
 describe("helpers", () => {
   it("isOnGrid accepts only real slot starts", () => {
     expect(isOnGrid(at("10:00"), 45, WINDOWS)).toBe(true);

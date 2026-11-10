@@ -2,12 +2,12 @@
 // No dependencies; needs Node 18+ (built-in fetch). Call this from your SERVER: Wellbeing sends no
 // CORS headers, so a browser on another origin cannot read the response.
 //
-// Contract: Team14-Integration-Contract.md (same folder)
+// Contract: Team14-Integration-Contract.md (same folder), version 2.0.
 
 const DEFAULTS = {
   baseUrl: "https://wellbeing-intake.vercel.app/api/v1",
   timeoutMs: 3000,
-  cacheTtlMs: 10 * 60 * 1000, // the catalogue is static seed data — caching is safe and polite
+  cacheTtlMs: 10 * 60 * 1000, // the catalogue rarely changes, but Wellbeing admins can edit it
   fetch: undefined, // inject your own in unit tests; defaults to the global fetch
 };
 
@@ -40,14 +40,13 @@ export function createWellbeingClient(options = {}) {
     }
     try {
       const body = await get("/services", cid);
-      if (!Array.isArray(body?.services)) throw new Error("wellbeing_bad_shape");
+      if (!Array.isArray(body)) throw new Error("wellbeing_bad_shape"); // 2.0: a plain array
       // Keep only the fields in the contract; ignore any field Wellbeing adds later.
-      const services = body.services.map((s) => ({
-        slug: String(s.slug), // the STABLE id — store this, never `id` (it changes when they reseed)
+      const services = body.map((s) => ({
+        id: String(s.id), // the STABLE id, e.g. "srv_academic_stress" — store this on your ticket
         name: String(s.name),
-        whatFor: String(s.whatFor),
-        firstSession: String(s.firstSession),
-        whoWillKnow: String(s.whoWillKnow),
+        description: String(s.description ?? ""),
+        durationMinutes: Number(s.duration_minutes),
       }));
       cache = { at: Date.now(), services };
       return { available: true, stale: false, fromCache: false, services, cid };
@@ -57,10 +56,10 @@ export function createWellbeingClient(options = {}) {
     }
   }
 
-  /** Resolve a slug stored on a ticket. `null` means "unknown service" — your not-found case. */
-  async function getService(slug, opts) {
+  /** Resolve an id stored on a ticket. `null` means "not offered right now" — your not-found case. */
+  async function getService(id, opts) {
     const result = await listServices(opts);
-    return { ...result, service: result.services.find((s) => s.slug === slug) ?? null };
+    return { ...result, service: result.services.find((s) => s.id === id) ?? null };
   }
 
   /** true only when Wellbeing answers 200 with its database up. */

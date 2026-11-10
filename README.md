@@ -7,14 +7,15 @@ followed by an automatic 15-minute buffer, so students don't meet in the entrywa
 > **Demo data only.** This is a prototype. Never load real student records, and never type real personal
 > problems into the deployed demo.
 
+- **How the code works, for explaining it:** [`docs/CODE-GUIDE.md`](docs/CODE-GUIDE.md)
 - Product requirements: [`docs/PRD.md`](docs/PRD.md) (the earlier design is in [`docs/archive/`](docs/archive))
 - API contract (OpenAPI 3.1): [`openapi.yaml`](openapi.yaml)
 - Building the screens: [`docs/BACKEND-HANDOFF.md`](docs/BACKEND-HANDOFF.md)
 - Operations: [`RUNBOOK.md`](RUNBOOK.md)
 - Earlier frontend notes: [`docs/FRONTEND-HANDOFF.md`](docs/FRONTEND-HANDOFF.md)
-- **Live:** <https://wellbeing-intake.vercel.app> (runs the previous design until this rebuild is switched on)
+- **Live:** <https://wellbeing-intake.vercel.app>
 
-Coursework A3, A5, A6/A7 and A8 in `docs/` describe the previous design and have not been updated for this rebuild.
+Every source file starts with a short plain-English comment saying what it does and why.
 
 ## Stack
 
@@ -75,7 +76,7 @@ default there, because anyone can post a note and staff logins can read notes.
 | --- | --- |
 | `pnpm test` | Unit: slot and buffer rules, access keys, urgency rule, AI path with the network stubbed, webhook contract |
 | `pnpm test:integration` | Real route handlers against the local database, including the PRD's `TEST-01` to `TEST-07`. Reseeds first. |
-| `pnpm eval:ai` | The urgency rule on the 12-case golden set (`eval/eval-cases.json`), with no key or network |
+| `pnpm eval:ai` | The urgency rule on the 15-case golden set (`eval/eval-cases.json`), with no key or network |
 | `pnpm eval:ai:live` | The same set against the real model. Run by hand; needs a key in `.env.vercel` |
 | `pnpm typecheck`, `pnpm lint` | Types and lint |
 | `pnpm check:openapi` | Every implemented route is in `openapi.yaml`, and vice versa |

@@ -1,3 +1,11 @@
+// What this component shows: the "Track your private request" page. The student types their
+// Private Access Key to see the service, status, date and time, and can cancel the request.
+// Used on: /requests, and /preview/requests in the development preview.
+// Talks to: GET /api/v1/services (for the service name), GET /api/v1/requests/me with the
+// X-Access-Key header, and POST /api/v1/requests/{id}/cancel with { access_key }.
+// Preview mode uses fictional in-memory data instead.
+// Note: the key is sent in a header, not in the URL, so it does not appear in web server logs.
+// The student's note is never shown here.
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -14,6 +22,7 @@ import {
 import { EmergencyBanner } from "../EmergencyBanner";
 import { UiIcon } from "../UiIcon";
 
+// Only "preview" is used. previewServiceId and justSent are accepted but ignored.
 export function RequestsDashboard({
   preview = false,
 }: {
@@ -21,10 +30,14 @@ export function RequestsDashboard({
   previewServiceId?: string;
   justSent?: boolean;
 }) {
+  // key: the text in the key box. It starts with the key handed over in memory by the receipt
+  // ("Track this request"), or "" if the student came here directly.
+  // activeKey: the key that last found a request; cancel uses it. request: the request found.
   const [key, setKey] = useState(getNavigationKey);
   const [activeKey, setActiveKey] = useState("");
   const [request, setRequest] = useState<AppointmentRequest | null>(null);
   const [services, setServices] = useState<Service[]>([]);
+  // Load the service names, to show a name instead of an ID. If it fails, a general title is used.
   useEffect(() => {
     let alive = true;
     studentApi(preview)<Service[]>("/services").then(result => {
@@ -32,9 +45,13 @@ export function RequestsDashboard({
     });
     return () => { alive = false; };
   }, [preview]);
+  // busy: a lookup or a cancel is running. message: text shown to the student.
+  // error: true makes the message an alert (read at once) instead of a polite status.
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState(false);
+  // dialog: the cancel confirmation. resultRef: the result card, which gets focus after a lookup.
+  // keyInput: the key box, which gets focus after "Clear". version: ignores an old lookup answer.
   const dialog = useRef<HTMLDialogElement>(null);
   const resultRef = useRef<HTMLElement>(null);
   const keyInput = useRef<HTMLInputElement>(null);
@@ -44,13 +61,19 @@ export function RequestsDashboard({
     setBusy(true);
     setMessage("");
     setRequest(null);
+    // Remove spaces and use capitals, so a key typed in small letters still matches.
     const normalized = key.trim().toUpperCase();
+    // The key goes in the X-Access-Key header, never in the URL.
     const r = await studentApi(preview)<AppointmentRequest>("/requests/me", {
       headers: { "X-Access-Key": normalized },
     });
+    // Ignore this answer if a newer lookup started or the student pressed "Clear".
     if (attempt !== version.current) return;
     setBusy(false);
     setError(!r.ok);
+    // Found: show the request, remember the key for cancelling, and move focus to the result.
+    // 404: no request has this key. The message is neutral and gives no other detail.
+    // Other errors, such as 429 (too many tries), use the shared errorMessage() text.
     if (r.ok && r.data) {
       setRequest(r.data);
       setActiveKey(normalized);
@@ -62,16 +85,21 @@ export function RequestsDashboard({
           : errorMessage(r.error),
       );
   }
+  // Runs when "Confirm cancellation" is pressed in the dialog.
+  // busy stops a second click while the first cancel is running.
   async function cancel() {
     if (!request || busy) return;
     setBusy(true);
     setMessage("");
+    // The server checks the access key again before it cancels.
     const r = await studentApi(preview)(
       `/requests/${encodeURIComponent(request.id)}/cancel`,
       { method: "POST", body: { access_key: activeKey } },
     );
     setBusy(false);
     setError(!r.ok);
+    // Success: show Cancelled, close the dialog and move focus back to the result card.
+    // The server has released the time and its privacy buffer for other students.
     if (r.ok) {
       setRequest({ ...request, status: "CANCELLED" });
       dialog.current?.close();
@@ -81,6 +109,8 @@ export function RequestsDashboard({
       );
     } else setMessage(errorMessage(r.error));
   }
+  // "Clear key and details": forget the key everywhere (the box, the in-memory hand-over and the result).
+  // version++ makes any lookup that is still running be ignored.
   function clear() {
     version.current++;
     setBusy(false);
@@ -91,6 +121,9 @@ export function RequestsDashboard({
     setMessage("");
     keyInput.current?.focus();
   }
+  // Layout: title, emergency contacts, the key form, a message line, the result card, and the cancel dialog.
+  // The key box has autoComplete="off" and spellCheck={false}: the browser does not save or check the key.
+  // Cancel is offered only for Pending or Confirmed requests, and always asks for confirmation first.
   return (
     <div className="requests-page mx-auto max-w-4xl space-y-6">
       <div>
@@ -160,6 +193,7 @@ export function RequestsDashboard({
             <h2 id="tracked-service-name">{services.find(service => service.id === request.service_id)?.name ?? "Counselling appointment"}</h2>
             <span className="tracked-request-status" data-status={request.status}><UiIcon name="status" className="size-4" />{STATUS_LABELS[request.status]}</span>
           </div>
+          {/* Date and time are shown in Bangkok time (Asia/Bangkok), whatever the device's time zone. */}
           <div className="tracked-request-schedule">
             <span className="tracked-calendar-icon"><UiIcon name="calendar" className="size-6" /></span>
             <dl><div><dt>{request.status === "PENDING" ? "Requested date" : "Appointment date"}</dt><dd>{new Date(request.requested_slot_start).toLocaleDateString("en-GB", { timeZone: "Asia/Bangkok", weekday: "long", day: "numeric", month: "long", year: "numeric" })}</dd></div><div><dt>Time</dt><dd>{campusTime(request.requested_slot_start)}–{campusTime(request.requested_slot_end)}<span className="tracked-timezone">Bangkok · UTC+7</span></dd></div></dl>
@@ -216,6 +250,7 @@ export function RequestsDashboard({
           </div>
         </section>
       )}
+      {/* Cancel confirmation dialog. While a cancel is running, Escape cannot close it (onCancel). */}
       <dialog
         ref={dialog}
         className="modal"

@@ -1,3 +1,8 @@
+# What this file is for: the main GitHub Actions workflow ("CI"). On a clean Linux machine it installs the
+# project and runs every automatic check: lint, types, API contract, tests, AI rule, build and secret scan.
+# When it is used: on every pull request, and again on every push to `main` (for example a merge).
+# If any step fails, the run stops and the pull request shows a red (failed) check.
+# This workflow does not deploy anything: Vercel deploys `main` by itself.
 name: CI
 
 on:
@@ -5,34 +10,51 @@ on:
   push:
     branches: [main]
 
+# Least privilege: the workflow's GitHub token can only read the repository, never write to it.
 permissions:
   contents: read
 
+# No usage data (telemetry) is sent to Next.js from CI; the project uses no telemetry anywhere.
 env:
   NEXT_TELEMETRY_DISABLED: "1"
 
 jobs:
+  # The only job. All checks run in order on one machine; cheap checks first, the database and build last.
   verify:
     runs-on: ubuntu-latest
+    # Stop a stuck run after 25 minutes (starting Supabase in Docker is the slowest part).
     timeout-minutes: 25
     steps:
+      # Download the code of the commit being tested.
       - uses: actions/checkout@v4
+      # Install pnpm. Its version comes from the "packageManager" field in package.json.
       - uses: pnpm/action-setup@v4
+      # Install Node.js 22 and cache downloaded packages so later runs are faster.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
+      # Install the exact versions in pnpm-lock.yaml; fail if the lockfile does not match package.json.
       - run: pnpm install --frozen-lockfile
 
+      # ESLint: code mistakes and bad patterns (rules in eslint.config.mjs).
       - run: pnpm lint
+      # Generate Next.js route types, then check all TypeScript types (`tsc --noEmit`, no output files).
       - run: pnpm typecheck
+      # Every API route in the code is documented in openapi.yaml, and openapi.yaml has no extra routes.
       - run: pnpm check:openapi
+      # Unit tests: slot and buffer rules, access keys, urgency rule, AI path, webhook contract.
       - run: pnpm test
+      # The urgency rule scored on the golden set in eval/eval-cases.json (no AI key, no network).
       - run: pnpm eval:ai
 
+      # Start a full local Supabase (Postgres + Auth) in Docker and apply every file in supabase/migrations.
+      # This also proves the migrations still run on an empty database.
       - name: Start local Supabase (applies migrations)
         run: pnpm db:start
 
+      # Create .env.local from the local stack's URL and keys, plus fixed CI-only secret values.
+      # These are not real secrets: they only exist on this throwaway machine for this one run.
       - name: Write .env.local from the local stack
         run: |
           pnpm exec supabase status -o env > status.env
@@ -47,9 +69,13 @@ jobs:
           } > .env.local
           rm status.env
 
+      # Reseed demo data, then call the real API route handlers against the local database.
       - name: Integration tests (the PRD's TEST-01 to TEST-07, booking, platform)
         run: pnpm test:integration
 
+      # Production build (`next build`): proves the whole app compiles, the same way Vercel builds it.
       - run: pnpm build
+      # Search the built browser files for the secret values in .env.local and for "service_role".
+      # Fails if any server secret could reach a visitor's browser.
       - name: Client bundle must contain no server secret
         run: pnpm scan:bundle

@@ -1,3 +1,8 @@
+// What this script does: it sends every fictional note in eval/eval-cases.json to the real AI model and
+// records if the model, and the app's final decision, gave the expected urgency, and how long it took.
+// Why it matters: it measures the real AI (accuracy, stable answers, speed), which CI cannot test. The
+// saved file eval/live-ai-results.json is the record of the last full run.
+// How to run it: `pnpm eval:ai:live` (needs LLM_API_KEY in .env.vercel; run by hand, never in CI).
 /**
  * One-off check of the real model on the golden dataset. `pnpm eval:ai` covers the deterministic rule
  * with no key and no network, so that it can gate CI; this covers what that cannot.
@@ -21,6 +26,7 @@ const RESULTS_PATH = "eval/live-ai-results.json";
 
 type Case = { id: string; category: string; input: string; expected: "ROUTINE" | "URGENT"; attack: boolean };
 
+// Read the optional --only=<case id> and --runs=<number> flags.
 const { values: args } = parseArgs({
   options: { only: { type: "string" }, runs: { type: "string", default: "1" } },
   strict: true,
@@ -32,6 +38,7 @@ async function main() {
   if (!env.llmApiKey) throw new Error("LLM_API_KEY is empty in .env.vercel.");
   if (!Number.isInteger(runsPerCase) || runsPerCase < 1) throw new Error("--runs must be a whole number.");
 
+  // Load the cases. With --only, keep just that one case.
   const all = JSON.parse(readFileSync("eval/eval-cases.json", "utf8")) as Case[];
   const cases = args.only ? all.filter((c) => c.id === args.only) : all;
   if (cases.length === 0) throw new Error(`No case named ${args.only}.`);
@@ -42,6 +49,8 @@ async function main() {
   const times: number[] = [];
   let needPause = false;
 
+  // For each case: if the injection guard blocks the text, the model is not called (as in the app).
+  // Otherwise call the model, waiting between calls to stay inside the free-tier rate limit.
   for (const c of cases) {
     const runs: { answer: string | null; ms: number }[] = [];
     if (hasPromptInjection(c.input)) {
@@ -76,6 +85,8 @@ async function main() {
     console.log(`${c.id} ${c.category.padEnd(8)} expected ${c.expected.padEnd(8)} model ${runs.map((r) => r.answer ?? "none").join(",").padEnd(10)} ${runs.map((r) => `${r.ms} ms`).join(", ")}`);
   }
 
+  // Summary: how often the model alone was right, how often the app's final answer was right,
+  // how many answers were unusable, and the median and slowest response times.
   const called = results.filter((r) => r.modelCalled);
   times.sort((a, b) => a - b);
   const summary = {
@@ -91,6 +102,7 @@ async function main() {
   };
   console.log(`\n${JSON.stringify(summary, null, 2)}`);
 
+  // Save the full results to eval/live-ai-results.json, but not for a single --only case.
   if (args.only) return;
   writeFileSync(RESULTS_PATH, `${JSON.stringify({ summary, results }, null, 2)}\n`);
   console.log(`\nWrote ${RESULTS_PATH}`);

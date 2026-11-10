@@ -1,3 +1,7 @@
+// What this layout does: the outer frame for every page: fonts, site header, skip link and footer.
+// URL: all routes. It is the root layout, so every page is rendered inside it.
+// Talks to: no API calls itself. The SiteHeader component inside it may call GET /api/v1/me.
+// Note: search engines are told not to index the site, because it is a booking app for sensitive needs.
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
@@ -5,6 +9,8 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { uiPreview } from "@/lib/ui-preview";
 import "./globals.css";
 
+// The fonts are files inside the app (local), so the browser never asks a font server like Google.
+// Each font becomes a CSS variable (for example --font-heading) that globals.css uses.
 const geistSans = localFont({
   src: "./fonts/geist-latin.woff2",
   variable: "--font-geist-sans",
@@ -20,7 +26,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/** The root layout. `children` is the page for the current URL; it is placed inside <main>. */
 export default function RootLayout({ children }: { children: ReactNode }) {
+  // data-theme="light" fixes the daisyUI colour theme. The "Skip to main content" link is hidden
+  // until a keyboard user presses Tab, then it jumps straight to <main id="main">.
+  // uiPreview is read on the server and passed to SiteHeader as a plain true/false prop.
   return (
     <html
       lang="en"
@@ -36,6 +46,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           Skip to main content
         </a>
         <SiteHeader preview={uiPreview}>
+          {/* Only in preview mode: a strip warns that the student data on screen is fictional. */}
           {uiPreview && (
             <p
               role="status"

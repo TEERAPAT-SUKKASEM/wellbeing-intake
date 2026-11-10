@@ -1,17 +1,26 @@
+// What this file does: shared helpers for the integration tests: the demo users and services, database
+// clients, and call(), which runs a route handler directly with a built HTTP request.
+// Why it matters: the tests run the real route code against the real local database with no web server,
+// and these helpers keep every test short and the same in style.
+// How to run it: it is not run by itself; the `pnpm test:integration` test files import it.
 import { createClient } from "@supabase/supabase-js";
 import { POST as createRequest } from "@/app/api/v1/requests/route";
 import { GET as getSlots } from "@/app/api/v1/slots/route";
 import { campusDateOf, type Slot } from "@/lib/slots/grid";
 
+// The base URL for built requests. No server listens here; handlers are called directly.
 export const BASE = "http://localhost:3000/api/v1";
+// The staff demo password. It must match the one `pnpm seed` used.
 export const PASSWORD = process.env.SEED_PASSWORD ?? "demo-password-16";
 
+// The demo staff logins created by `pnpm seed`.
 export const USERS = {
   practitioner: "practitioner.1@demo.test",
   practitioner2: "practitioner.2@demo.test",
   admin: "admin@demo.test",
 } as const;
 
+// The demo service ids created by `pnpm seed`.
 export const SERVICES = {
   academic: "srv_academic_stress", // 45 minutes
   general: "srv_general_counselling", // 45 minutes
@@ -31,6 +40,7 @@ export const anon = () =>
 
 const tokens = new Map<string, string>();
 
+// Signs in as a staff user and returns their login token. Each user signs in only once per run (cached).
 export async function tokenFor(email: string): Promise<string> {
   const cached = tokens.get(email);
   if (cached) return cached;
@@ -42,10 +52,13 @@ export async function tokenFor(email: string): Promise<string> {
 
 type Handler = (req: Request, ctx?: { params?: Promise<Record<string, string>> }) => Promise<Response>;
 
+// What call() returns: the status code, the raw body text, the parsed JSON and the response headers.
 // `json` is loose on purpose: routes answer with objects and with arrays.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type CallResult = { status: number; text: string; json: any; headers: Headers };
 
+// Builds a Request (optional staff login with `as`, JSON body, URL params, extra headers), passes it to
+// the route handler and returns the answer. Every integration test talks to the API through this.
 export async function call(
   handler: Handler,
   opts: {
@@ -76,6 +89,7 @@ export async function call(
   return { status: res.status, text, json, headers: res.headers };
 }
 
+// GET /slots for one service and one date, as a student would see them. Throws if the status is not 200.
 export const slotsFor = async (serviceId: string, date: string): Promise<Slot[]> => {
   const r = await call(getSlots, { path: `/slots?service_id=${serviceId}&date=${date}` });
   if (r.status !== 200) throw new Error(`slots failed: ${r.status}`);
@@ -104,8 +118,10 @@ export function quietWeekday(startingDaysAhead: number): string {
   throw new Error("no weekday in range");
 }
 
+// Turns a campus date and time (UTC+7), for example "2026-11-10" and "10:00", into a UTC ISO string.
 export const campusTime = (date: string, time: string) => new Date(`${date}T${time}:00+07:00`).toISOString();
 
+// A valid anonymous booking body for the given start time. Pass overrides to change any field.
 export const requestBody = (requestedSlotStart: string, overrides: Record<string, unknown> = {}) => ({
   service_id: SERVICES.academic,
   alias: "QuietStudent",
@@ -115,6 +131,7 @@ export const requestBody = (requestedSlotStart: string, overrides: Record<string
   ...overrides,
 });
 
+// POST /requests with this body and optional headers. No login is sent: students are anonymous.
 export const submit = (body: Record<string, unknown>, headers?: Record<string, string>) =>
   call(createRequest, { method: "POST", path: "/requests", body, headers });
 
